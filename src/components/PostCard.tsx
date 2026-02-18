@@ -86,7 +86,7 @@ const PostCard: React.FC<PostCardProps> = ({ post, onPostUpdate }) => {
           {/* Author Info and Time */}
           <div className="flex items-center gap-2 mb-1">
             <Link
-              to={`/profile/${localPost.author.id}`}
+              to={`/profile/${localPost.author?.id}`}
               className="font-semibold hover:underline truncate"
             >
               @{localPost.author.username}

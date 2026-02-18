@@ -114,7 +114,43 @@ const Feed: React.FC = () => {
           <div className="flex justify-center py-8">
             <Loader2 className="h-8 w-8 animate-spin text-primary" />
           </div>
-        ) : posts.length === 0 ? (
+        ) : (posts?.length ?? 0) === 0 ? ( // <--- AJUSTE AQUI (Proteção contra undefined)
+          <div className="text-center py-12 px-4">
+            <p className="text-muted-foreground text-lg mb-2">
+              Seu feed está vazio
+            </p>
+            <p className="text-muted-foreground text-sm">
+              Siga outros usuários para ver suas postagens aqui!
+            </p>
+          </div>
+        ) : (
+  <>
+    {/* Garante que o map só rode se posts existir */}
+    {posts?.map((post) => (
+      <PostCard key={post.id} post={post} onPostUpdate={handlePostUpdate} />
+    ))}
+
+    {/* Load More Trigger */}
+    <div ref={loadMoreRef} className="py-4">
+      {isLoadingMore && (
+        <div className="flex justify-center">
+          <Loader2 className="h-6 w-6 animate-spin text-primary" />
+        </div>
+      )}
+      {!hasMore && (posts?.length ?? 0) > 0 && ( // <--- AJUSTE AQUI TAMBÉM
+        <p className="text-center text-muted-foreground text-sm">
+          Você viu todas as postagens
+        </p>
+      )}
+    </div>
+  </>
+)}
+        {/* Posts List */}
+        {isLoading ? (
+          <div className="flex justify-center py-8">
+            <Loader2 className="h-8 w-8 animate-spin text-primary" />
+          </div>
+        ) : (posts || []).length === 0 ? (
           <div className="text-center py-12 px-4">
             <p className="text-muted-foreground text-lg mb-2">
               Seu feed está vazio
@@ -125,7 +161,8 @@ const Feed: React.FC = () => {
           </div>
         ) : (
           <>
-            {posts.map((post) => (
+            {/* O ?.map garante que só execute se posts existir */}
+            {posts?.map((post) => (
               <PostCard key={post.id} post={post} onPostUpdate={handlePostUpdate} />
             ))}
 
@@ -136,7 +173,8 @@ const Feed: React.FC = () => {
                   <Loader2 className="h-6 w-6 animate-spin text-primary" />
                 </div>
               )}
-              {!hasMore && posts.length > 0 && (
+              {/* O (posts?.length ?? 0) evita o erro de undefined */}
+              {!hasMore && (posts?.length ?? 0) > 0 && (
                 <p className="text-center text-muted-foreground text-sm">
                   Você viu todas as postagens
                 </p>
