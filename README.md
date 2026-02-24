@@ -10,7 +10,7 @@ A aplicação consome uma API Django REST Framework hospedada no PythonAnywhere.
 * **Lucide React** (Ícones)
 
 ## 🔗 Links do Projeto
-* **Backend (API):** https://luanvieira10.pythonanywhere.com/api/
+* **Backend (API):** https://academic-tweet-clone.vercel.app/login
 * **Frontend (Deploy):** [COLE_AQUI_O_LINK_DA_VERCEL]
 * **Repositório Backend:** https://github.com/luanwitch/twitter-backend
 
