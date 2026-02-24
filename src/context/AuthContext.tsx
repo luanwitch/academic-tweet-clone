@@ -1,4 +1,3 @@
-// Authentication Context - Manages global auth state
 import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
 import { authService } from '@/services/authService';
 import type { User, LoginCredentials, RegisterCredentials } from '@/types';
@@ -19,16 +18,17 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [user, setUser] = useState<User | null>(null);
   const [isLoading, setIsLoading] = useState(true);
 
-  // Check if user is logged in on mount
+  // Verifica se o usuário está logado ao montar o componente
   useEffect(() => {
     const initAuth = async () => {
       if (authService.isAuthenticated()) {
         try {
           const currentUser = await authService.getCurrentUser();
           setUser(currentUser);
-        } catch {
-          // Token invalid, clear it
+        } catch (error) {
+          console.error("Token inválido ou expirado:", error);
           localStorage.removeItem('auth_token');
+          setUser(null);
         }
       }
       setIsLoading(false);
@@ -38,24 +38,36 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   }, []);
 
   const login = useCallback(async (credentials: LoginCredentials) => {
-    const response = await authService.login(credentials);
-    setUser(response.user);
+    await authService.login(credentials);
+    // Após salvar o token, buscamos os detalhes do usuário
+    const currentUser = await authService.getCurrentUser();
+    setUser(currentUser);
   }, []);
 
   const register = useCallback(async (credentials: RegisterCredentials) => {
-    const response = await authService.register(credentials);
-    setUser(response.user);
+    await authService.register(credentials);
+    // Após o registro, buscamos os detalhes do usuário
+    const currentUser = await authService.getCurrentUser();
+    setUser(currentUser);
   }, []);
 
   const logout = useCallback(async () => {
-    await authService.logout();
-    setUser(null);
+    try {
+      await authService.logout();
+    } finally {
+      setUser(null);
+      localStorage.removeItem('auth_token');
+    }
   }, []);
 
   const refreshUser = useCallback(async () => {
     if (authService.isAuthenticated()) {
-      const currentUser = await authService.getCurrentUser();
-      setUser(currentUser);
+      try {
+        const currentUser = await authService.getCurrentUser();
+        setUser(currentUser);
+      } catch (error) {
+        setUser(null);
+      }
     }
   }, []);
 

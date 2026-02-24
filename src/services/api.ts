@@ -1,5 +1,7 @@
 // API Configuration for Django REST Framework Backend
-const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000/api';
+// CORREÇÃO: Removendo barra final da base para evitar duplicação
+const BASE = import.meta.env.VITE_API_URL || 'http://localhost:8000/api';
+const API_BASE_URL = BASE.endsWith('/') ? BASE.slice(0, -1) : BASE;
 
 // Get the auth token from localStorage
 const getAuthToken = (): string | null => {
@@ -8,13 +10,15 @@ const getAuthToken = (): string | null => {
 
 /**
  * Generic fetch wrapper with auth headers
- * CORREÇÃO: Adicionado tratamento para respostas não-JSON (HTML de erro do Django)
  */
 export const apiRequest = async <T>(
   endpoint: string,
   options: RequestInit = {}
 ): Promise<T> => {
   const token = getAuthToken();
+  
+  // CORREÇÃO: Garante que o endpoint comece com uma única barra
+  const cleanEndpoint = endpoint.startsWith('/') ? endpoint : `/${endpoint}`;
   
   const headers: HeadersInit = {
     'Content-Type': 'application/json',
@@ -25,30 +29,27 @@ export const apiRequest = async <T>(
     (headers as Record<string, string>)['Authorization'] = `Token ${token}`;
   }
 
-  const response = await fetch(`${API_BASE_URL}${endpoint}`, {
+  // A concatenação agora é segura contra barras duplas
+  const response = await fetch(`${API_BASE_URL}${cleanEndpoint}`, {
     ...options,
     headers,
   });
 
-  // 1. Lida com 204 No Content (ex: delete, like)
   if (response.status === 204) {
     return {} as T;
   }
 
-  // 2. Valida se a resposta é JSON para evitar o erro "Unexpected token <"
   const contentType = response.headers.get("content-type");
   let data: any;
 
   if (contentType && contentType.includes("application/json")) {
     data = await response.json();
   } else {
-    // Se o Django retornar HTML (erro 404 ou 500), capturamos como texto
     const errorText = await response.text();
     console.error("Erro crítico do servidor (HTML recebido):", errorText);
-    throw new Error(`Erro no servidor (${response.status}). Verifique se a rota ${endpoint} existe no Backend.`);
+    throw new Error(`Erro ${response.status}: O Backend não retornou JSON. Verifique a rota ${cleanEndpoint}.`);
   }
 
-  // 3. Lida com erros de validação do Django (400, 401, 403, etc)
   if (!response.ok) {
     const errorMessage = 
       data.detail || 
@@ -61,20 +62,20 @@ export const apiRequest = async <T>(
   return data as T;
 };
 
-
 export const apiUpload = async <T>(
   endpoint: string,
   formData: FormData,
-  method: 'POST' | 'PATCH' = 'PATCH' // Permite flexibilidade
+  method: 'POST' | 'PATCH' = 'PATCH'
 ): Promise<T> => {
   const token = getAuthToken();
+  const cleanEndpoint = endpoint.startsWith('/') ? endpoint : `/${endpoint}`;
   const headers: HeadersInit = {};
   
   if (token) {
     headers['Authorization'] = `Token ${token}`;
   }
 
-  const response = await fetch(`${API_BASE_URL}${endpoint}`, {
+  const response = await fetch(`${API_BASE_URL}${cleanEndpoint}`, {
     method,
     headers, 
     body: formData,

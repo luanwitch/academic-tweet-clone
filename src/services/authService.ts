@@ -11,7 +11,9 @@ export const authService = {
     });
     
     // Store token in localStorage
-    localStorage.setItem('auth_token', response.token);
+    if (response.token) {
+      localStorage.setItem('auth_token', response.token);
+    }
     
     return response;
   },
@@ -24,7 +26,9 @@ export const authService = {
     });
     
     // Store token in localStorage
-    localStorage.setItem('auth_token', response.token);
+    if (response.token) {
+      localStorage.setItem('auth_token', response.token);
+    }
     
     return response;
   },
@@ -32,21 +36,24 @@ export const authService = {
   // Logout user
   async logout(): Promise<void> {
     try {
+      // O endpoint /auth/logout/ no Django deleta o Token no banco
       await apiRequest('/auth/logout/', {
         method: 'POST',
       });
+    } catch (error) {
+      console.warn("Aviso: Falha ao informar logout ao servidor, limpando localmente...");
     } finally {
-      // Always clear token, even if request fails
+      // Sempre remove o token do navegador, mesmo se a rede falhar
       localStorage.removeItem('auth_token');
     }
   },
 
-  // Get current user profile
+  // Get current user profile (Dados que alimentam o AuthContext)
   async getCurrentUser(): Promise<User> {
     return apiRequest<User>('/users/me/');
   },
 
-  // Check if user is authenticated
+  // Check if user is authenticated (Apenas verifica presença do Token)
   isAuthenticated(): boolean {
     return !!localStorage.getItem('auth_token');
   },
