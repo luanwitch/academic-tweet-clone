@@ -1,16 +1,15 @@
-// API Configuration for Django REST Framework Backend
-// CORREÇÃO: Removemos barras extras da URL base vinda do .env
+// Configuração da URL Base
+// Remove barras extras caso existam no seu arquivo .env
 const BASE = import.meta.env.VITE_API_URL || 'http://localhost:8000/api';
 const API_BASE_URL = BASE.endsWith('/') ? BASE.slice(0, -1) : BASE;
 
-// Get the auth token from localStorage
 const getAuthToken = (): string | null => {
   return localStorage.getItem('auth_token');
 };
 
 /**
- * Generic fetch wrapper with auth headers
- * CORREÇÃO: Sanitização automática do endpoint
+ * Wrapper genérico para fetch
+ * CORREÇÃO: Limpeza automática de endpoints para evitar barras duplas
  */
 export const apiRequest = async <T>(
   endpoint: string,
@@ -18,7 +17,7 @@ export const apiRequest = async <T>(
 ): Promise<T> => {
   const token = getAuthToken();
   
-  // CORREÇÃO: Garante que o endpoint comece com apenas uma barra
+  // Garante que o endpoint comece com apenas uma barra
   const cleanEndpoint = endpoint.startsWith('/') ? endpoint : `/${endpoint}`;
   
   const headers: HeadersInit = {
@@ -30,16 +29,13 @@ export const apiRequest = async <T>(
     (headers as Record<string, string>)['Authorization'] = `Token ${token}`;
   }
 
-  // A montagem agora ignora se você colocou 'login' indevidamente no meio
+  // A montagem final agora é sempre segura
   const response = await fetch(`${API_BASE_URL}${cleanEndpoint}`, {
     ...options,
     headers,
   });
 
-  // Lida com 204 No Content
-  if (response.status === 204) {
-    return {} as T;
-  }
+  if (response.status === 204) return {} as T;
 
   const contentType = response.headers.get("content-type");
   let data: any;
@@ -47,18 +43,14 @@ export const apiRequest = async <T>(
   if (contentType && contentType.includes("application/json")) {
     data = await response.json();
   } else {
-    // Captura o erro HTML do Django para não quebrar o parser JSON
+    // Captura o HTML de erro (404/500) do Django para exibir no console
     const errorText = await response.text();
-    console.error("Erro crítico do servidor (HTML recebido):", errorText);
-    throw new Error(`Erro 404: O Backend não retornou JSON. Verifique a rota ${cleanEndpoint}.`);
+    console.error("Servidor retornou HTML em vez de JSON:", errorText);
+    throw new Error(`Erro ${response.status}: Rota não encontrada no Backend.`);
   }
 
   if (!response.ok) {
-    const errorMessage = 
-      data.detail || 
-      data.message || 
-      (typeof data === 'object' ? Object.values(data).flat().join(', ') : null) || 
-      'Erro na requisição';
+    const errorMessage = data.detail || data.message || 'Erro na requisição';
     throw new Error(errorMessage);
   }
 
