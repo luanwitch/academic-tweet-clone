@@ -1,6 +1,4 @@
 // API Configuration for Django REST Framework Backend
-// Change VITE_API_URL in your .env file to point to your Django server
-
 const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000/api';
 
 // Get the auth token from localStorage
@@ -8,7 +6,10 @@ const getAuthToken = (): string | null => {
   return localStorage.getItem('auth_token');
 };
 
-// Generic fetch wrapper with auth headers
+/**
+ * Generic fetch wrapper with auth headers
+ * CORREÇÃO: Adicionado tratamento para respostas não-JSON (HTML de erro do Django)
+ */
 export const apiRequest = async <T>(
   endpoint: string,
   options: RequestInit = {}
@@ -20,7 +21,6 @@ export const apiRequest = async <T>(
     ...options.headers,
   };
 
-  // Add auth token if available
   if (token) {
     (headers as Record<string, string>)['Authorization'] = `Token ${token}`;
   }
@@ -30,17 +30,30 @@ export const apiRequest = async <T>(
     headers,
   });
 
-  // Handle 204 No Content
+  // 1. Lida com 204 No Content (ex: delete, like)
   if (response.status === 204) {
     return {} as T;
   }
 
-  const data = await response.json();
+  // 2. Valida se a resposta é JSON para evitar o erro "Unexpected token <"
+  const contentType = response.headers.get("content-type");
+  let data: any;
 
+  if (contentType && contentType.includes("application/json")) {
+    data = await response.json();
+  } else {
+    // Se o Django retornar HTML (erro 404 ou 500), capturamos como texto
+    const errorText = await response.text();
+    console.error("Erro crítico do servidor (HTML recebido):", errorText);
+    throw new Error(`Erro no servidor (${response.status}). Verifique se a rota ${endpoint} existe no Backend.`);
+  }
+
+  // 3. Lida com erros de validação do Django (400, 401, 403, etc)
   if (!response.ok) {
-    // Extract error message from DRF response
-    const errorMessage = data.detail || data.message || 
-      Object.values(data).flat().join(', ') || 
+    const errorMessage = 
+      data.detail || 
+      data.message || 
+      (typeof data === 'object' ? Object.values(data).flat().join(', ') : null) || 
       'Erro na requisição';
     throw new Error(errorMessage);
   }
@@ -48,13 +61,13 @@ export const apiRequest = async <T>(
   return data as T;
 };
 
-// File upload wrapper (for profile pictures)
+
 export const apiUpload = async <T>(
   endpoint: string,
-  formData: FormData
+  formData: FormData,
+  method: 'POST' | 'PATCH' = 'PATCH' // Permite flexibilidade
 ): Promise<T> => {
   const token = getAuthToken();
-  
   const headers: HeadersInit = {};
   
   if (token) {
@@ -62,15 +75,22 @@ export const apiUpload = async <T>(
   }
 
   const response = await fetch(`${API_BASE_URL}${endpoint}`, {
-    method: 'PATCH',
-    headers,
+    method,
+    headers, 
     body: formData,
   });
 
-  const data = await response.json();
+  const contentType = response.headers.get("content-type");
+  let data: any;
+
+  if (contentType && contentType.includes("application/json")) {
+    data = await response.json();
+  } else {
+    throw new Error(`Erro no upload (${response.status}).`);
+  }
 
   if (!response.ok) {
-    const errorMessage = data.detail || data.message || 'Erro no upload';
+    const errorMessage = data.detail || data.message || 'Erro no upload de arquivo';
     throw new Error(errorMessage);
   }
 

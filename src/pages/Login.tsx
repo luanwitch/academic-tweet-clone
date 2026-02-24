@@ -1,5 +1,4 @@
-// Login Page - User authentication
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Link, useNavigate, useLocation } from 'react-router-dom';
 import { Loader2, Twitter } from 'lucide-react';
 import { z } from 'zod';
@@ -12,7 +11,6 @@ import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '
 import { useToast } from '@/hooks/use-toast';
 import { useAuth } from '@/context/AuthContext';
 
-// Validation schema
 const loginSchema = z.object({
   username: z.string().min(1, 'Username é obrigatório'),
   password: z.string().min(1, 'Senha é obrigatória'),
@@ -27,8 +25,8 @@ const Login: React.FC = () => {
   const { toast } = useToast();
   const [isLoading, setIsLoading] = useState(false);
 
-  // Redirect if already logged in
-  React.useEffect(() => {
+  // Redireciona se já estiver logado
+  useEffect(() => {
     if (isAuthenticated) {
       const from = location.state?.from?.pathname || '/';
       navigate(from, { replace: true });
@@ -47,16 +45,19 @@ const Login: React.FC = () => {
     setIsLoading(true);
     try {
       await login({ username: data.username, password: data.password });
+      
       toast({
         title: 'Bem-vindo!',
         description: 'Login realizado com sucesso.',
       });
-      const from = location.state?.from?.pathname || '/';
-      navigate(from, { replace: true });
-    } catch (error) {
+
+      // O navigate agora acontece via useEffect quando o estado isAuthenticated mudar
+    } catch (error: any) {
+      console.error("Erro detalhado:", error);
       toast({
         title: 'Erro no login',
-        description: error instanceof Error ? error.message : 'Credenciais inválidas',
+        // O Django DRF costuma retornar erro em 'non_field_errors' ou 'detail'
+        description: error.message || 'Verifique suas credenciais e a conexão com o servidor.',
         variant: 'destructive',
       });
     } finally {
