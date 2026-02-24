@@ -1,5 +1,5 @@
 // User Service - Handles user profiles, follow/unfollow
-import { apiRequest, apiUpload } from './api';
+import { apiRequest } from './api';
 import type { User, ProfileUpdateData, PasswordChangeData, PaginatedResponse } from '@/types';
 
 export const userService = {
@@ -61,3 +61,7 @@ export const userService = {
     return apiRequest<User[]>(`/users/search/?q=${encodeURIComponent(query)}`);
   },
 };
+function apiUpload<T>(arg0: string, formData: FormData): User | PromiseLike<User> {
+  throw new Error('Function not implemented.');
+}
+

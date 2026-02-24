@@ -2,6 +2,9 @@
 // CORREÇÃO: Removemos barras extras da URL base vinda do .env para evitar duplicação
 const BASE = import.meta.env.VITE_API_URL || 'http://localhost:8000/api';
 const API_BASE_URL = BASE.endsWith('/') ? BASE.slice(0, -1) : BASE;
+console.log("BASE:", BASE);
+console.log("FINAL URL:", `${API_BASE_URL}/auth/login/`);
+
 
 // Get the auth token from localStorage
 const getAuthToken = (): string | null => {

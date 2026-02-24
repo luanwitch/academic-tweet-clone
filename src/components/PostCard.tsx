@@ -1,4 +1,3 @@
-// PostCard Component - Displays a single post with like and comment functionality
 import React, { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { Heart, MessageCircle, Loader2 } from 'lucide-react';
@@ -21,6 +20,11 @@ const PostCard: React.FC<PostCardProps> = ({ post, onPostUpdate }) => {
   const [showComments, setShowComments] = useState(false);
   const [localPost, setLocalPost] = useState(post);
   const { toast } = useToast();
+
+  // 🔒 Proteção contra dados indefinidos
+  if (!localPost || !localPost.author) {
+    return <div className="p-4 text-sm text-muted-foreground">Carregando...</div>;
+  }
 
   const handleLike = async () => {
     if (isLiking) return;
@@ -49,7 +53,10 @@ const PostCard: React.FC<PostCardProps> = ({ post, onPostUpdate }) => {
     } catch (error) {
       toast({
         title: 'Erro',
-        description: error instanceof Error ? error.message : 'Não foi possível processar a ação',
+        description:
+          error instanceof Error
+            ? error.message
+            : 'Não foi possível processar a ação',
         variant: 'destructive',
       });
     } finally {
@@ -74,19 +81,26 @@ const PostCard: React.FC<PostCardProps> = ({ post, onPostUpdate }) => {
   return (
     <article className="border-b border-border p-4 hover:bg-muted/50 transition-colors">
       <div className="flex gap-3">
-        {/* Author Avatar */}
+        
+        {/* Avatar */}
         <Link to={`/profile/${localPost.author.id}`}>
           <Avatar className="h-12 w-12">
-            <AvatarImage src={localPost.author.profile_picture} alt={localPost.author.username} />
-            <AvatarFallback>{localPost.author.username.charAt(0).toUpperCase()}</AvatarFallback>
+            <AvatarImage
+              src={localPost.author.profile_picture || ''}
+              alt={localPost.author.username}
+            />
+            <AvatarFallback>
+              {localPost.author.username.charAt(0).toUpperCase()}
+            </AvatarFallback>
           </Avatar>
         </Link>
 
         <div className="flex-1 min-w-0">
-          {/* Author Info and Time */}
+          
+          {/* Author + Time */}
           <div className="flex items-center gap-2 mb-1">
             <Link
-              to={`/profile/${localPost.author?.id}`}
+              to={`/profile/${localPost.author.id}`}
               className="font-semibold hover:underline truncate"
             >
               @{localPost.author.username}
@@ -95,30 +109,37 @@ const PostCard: React.FC<PostCardProps> = ({ post, onPostUpdate }) => {
             <span className="text-muted-foreground text-sm">{timeAgo}</span>
           </div>
 
-          {/* Post Content */}
+          {/* Conteúdo */}
           <p className="text-foreground whitespace-pre-wrap break-words mb-3">
             {localPost.content}
           </p>
 
-          {/* Actions */}
+          {/* Ações */}
           <div className="flex items-center gap-6">
-            {/* Like Button */}
+            
+            {/* Like */}
             <Button
               variant="ghost"
               size="sm"
-              className={`gap-2 px-2 ${localPost.is_liked ? 'text-red-500' : 'text-muted-foreground'}`}
+              className={`gap-2 px-2 ${
+                localPost.is_liked ? 'text-red-500' : 'text-muted-foreground'
+              }`}
               onClick={handleLike}
               disabled={isLiking}
             >
               {isLiking ? (
                 <Loader2 className="h-4 w-4 animate-spin" />
               ) : (
-                <Heart className={`h-4 w-4 ${localPost.is_liked ? 'fill-current' : ''}`} />
+                <Heart
+                  className={`h-4 w-4 ${
+                    localPost.is_liked ? 'fill-current' : ''
+                  }`}
+                />
               )}
               <span>{localPost.likes_count}</span>
             </Button>
 
-            {/* Comment Button */}
+            {/* Comentários */}
             <Button
               variant="ghost"
               size="sm"
@@ -130,9 +151,12 @@ const PostCard: React.FC<PostCardProps> = ({ post, onPostUpdate }) => {
             </Button>
           </div>
 
-          {/* Comments Section */}
+          {/* Comentários */}
           {showComments && (
-            <CommentSection postId={localPost.id} onCommentAdded={handleCommentAdded} />
+            <CommentSection
+              postId={localPost.id}
+              onCommentAdded={handleCommentAdded}
+            />
           )}
         </div>
       </div>
