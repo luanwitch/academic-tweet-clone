@@ -21,14 +21,15 @@ const PostCard: React.FC<PostCardProps> = ({ post, onPostUpdate }) => {
   const [localPost, setLocalPost] = useState(post);
   const { toast } = useToast();
 
-  // 🔒 Proteção contra dados indefinidos
-  if (!localPost || !localPost.author) {
-    return <div className="p-4 text-sm text-muted-foreground">Carregando...</div>;
-  }
+  // CORREÇÃO: Removida a trava do !localPost.author
+  if (!localPost) return null;
+
+  // Pegamos os dados do autor com segurança (Django envia username direto no post às vezes)
+  const authorName = localPost.username || (localPost.author as any)?.username || 'Usuário';
+  const authorId = (localPost.author as any)?.id || localPost.user_id || localPost.id;
 
   const handleLike = async () => {
     if (isLiking) return;
-
     setIsLiking(true);
     try {
       if (localPost.is_liked) {
@@ -36,7 +37,7 @@ const PostCard: React.FC<PostCardProps> = ({ post, onPostUpdate }) => {
         const updatedPost = {
           ...localPost,
           is_liked: false,
-          likes_count: localPost.likes_count - 1,
+          likes_count: Math.max(0, (localPost.likes_count || 0) - 1),
         };
         setLocalPost(updatedPost);
         onPostUpdate?.(updatedPost);
@@ -45,7 +46,7 @@ const PostCard: React.FC<PostCardProps> = ({ post, onPostUpdate }) => {
         const updatedPost = {
           ...localPost,
           is_liked: true,
-          likes_count: localPost.likes_count + 1,
+          likes_count: (localPost.likes_count || 0) + 1,
         };
         setLocalPost(updatedPost);
         onPostUpdate?.(updatedPost);
@@ -53,10 +54,7 @@ const PostCard: React.FC<PostCardProps> = ({ post, onPostUpdate }) => {
     } catch (error) {
       toast({
         title: 'Erro',
-        description:
-          error instanceof Error
-            ? error.message
-            : 'Não foi possível processar a ação',
+        description: 'Não foi possível processar o like',
         variant: 'destructive',
       });
     } finally {
@@ -67,61 +65,58 @@ const PostCard: React.FC<PostCardProps> = ({ post, onPostUpdate }) => {
   const handleCommentAdded = () => {
     const updatedPost = {
       ...localPost,
-      comments_count: localPost.comments_count + 1,
+      comments_count: (localPost.comments_count || 0) + 1,
     };
     setLocalPost(updatedPost);
     onPostUpdate?.(updatedPost);
   };
 
-  const timeAgo = formatDistanceToNow(new Date(localPost.created_at), {
-    addSuffix: true,
-    locale: ptBR,
-  });
+  // Proteção para a data
+  const timeAgo = localPost.created_at 
+    ? formatDistanceToNow(new Date(localPost.created_at), { addSuffix: true, locale: ptBR })
+    : '';
 
   return (
-    <article className="border-b border-border p-4 hover:bg-muted/50 transition-colors">
+    <article className="border-b border-border p-4 hover:bg-muted/50 transition-colors w-full bg-white dark:bg-transparent">
       <div className="flex gap-3">
         
         {/* Avatar */}
-        <Link to={`/profile/${localPost.author.id}`}>
-          <Avatar className="h-12 w-12">
+        <Link to={`/profile/${authorId}`}>
+          <Avatar className="h-12 w-12 border border-border">
             <AvatarImage
-              src={localPost.author.profile_picture || ''}
-              alt={localPost.author.username}
+              src={(localPost.author as any)?.profile_picture || ''}
+              alt={authorName}
             />
-            <AvatarFallback>
-              {localPost.author.username.charAt(0).toUpperCase()}
+            <AvatarFallback className="bg-primary text-primary-foreground">
+              {authorName.charAt(0).toUpperCase()}
             </AvatarFallback>
           </Avatar>
         </Link>
 
         <div className="flex-1 min-w-0">
-          
           {/* Author + Time */}
           <div className="flex items-center gap-2 mb-1">
             <Link
-              to={`/profile/${localPost.author.id}`}
-              className="font-semibold hover:underline truncate"
+              to={`/profile/${authorId}`}
+              className="font-bold hover:underline truncate text-foreground"
             >
-              @{localPost.author.username}
+              @{authorName}
             </Link>
-            <span className="text-muted-foreground text-sm">·</span>
-            <span className="text-muted-foreground text-sm">{timeAgo}</span>
+            <span className="text-muted-foreground text-xs">·</span>
+            <span className="text-muted-foreground text-xs">{timeAgo}</span>
           </div>
 
           {/* Conteúdo */}
-          <p className="text-foreground whitespace-pre-wrap break-words mb-3">
+          <p className="text-foreground text-[15px] whitespace-pre-wrap break-words mb-3 leading-normal">
             {localPost.content}
           </p>
 
           {/* Ações */}
           <div className="flex items-center gap-6">
-            
-            {/* Like */}
             <Button
               variant="ghost"
               size="sm"
-              className={`gap-2 px-2 ${
+              className={`gap-2 px-2 hover:bg-red-50 hover:text-red-500 transition-colors ${
                 localPost.is_liked ? 'text-red-500' : 'text-muted-foreground'
               }`}
               onClick={handleLike}
@@ -130,33 +125,29 @@ const PostCard: React.FC<PostCardProps> = ({ post, onPostUpdate }) => {
               {isLiking ? (
                 <Loader2 className="h-4 w-4 animate-spin" />
               ) : (
-                <Heart
-                  className={`h-4 w-4 ${
-                    localPost.is_liked ? 'fill-current' : ''
-                  }`}
-                />
+                <Heart className={`h-4 w-4 ${localPost.is_liked ? 'fill-current' : ''}`} />
               )}
-              <span>{localPost.likes_count}</span>
+              <span className="text-xs font-medium">{localPost.likes_count || 0}</span>
             </Button>
 
-            {/* Comentários */}
             <Button
               variant="ghost"
               size="sm"
-              className="gap-2 px-2 text-muted-foreground"
+              className="gap-2 px-2 text-muted-foreground hover:bg-blue-50 hover:text-blue-500"
               onClick={() => setShowComments(!showComments)}
             >
               <MessageCircle className="h-4 w-4" />
-              <span>{localPost.comments_count}</span>
+              <span className="text-xs font-medium">{localPost.comments_count || 0}</span>
             </Button>
           </div>
 
-          {/* Comentários */}
           {showComments && (
-            <CommentSection
-              postId={localPost.id}
-              onCommentAdded={handleCommentAdded}
-            />
+            <div className="mt-4 pt-4 border-t border-border">
+              <CommentSection
+                postId={localPost.id}
+                onCommentAdded={handleCommentAdded}
+              />
+            </div>
           )}
         </div>
       </div>

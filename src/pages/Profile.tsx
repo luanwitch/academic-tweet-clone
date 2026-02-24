@@ -83,36 +83,64 @@ const Profile: React.FC = () => {
   });
 
   // Load profile data
-  useEffect(() => {
-    const loadProfile = async () => {
-      if (!userId) return;
+useEffect(() => {
+  const loadProfile = async () => {
+    if (!userId) return;
 
-      setIsLoading(true);
-      try {
-        const [user, userPosts, userFollowers, userFollowing] = await Promise.all([
-          isOwnProfile ? Promise.resolve(currentUser!) : userService.getUser(userId),
+    setIsLoading(true);
+
+    try {
+      const [user, postsResponse, userFollowers, userFollowing] =
+        await Promise.all([
+          isOwnProfile
+            ? Promise.resolve(currentUser!)
+            : userService.getUser(userId),
           postService.getPosts(userId),
           userService.getFollowers(userId),
           userService.getFollowing(userId),
         ]);
+      setProfileUser(user);
+      const normalizedPosts: Post[] = Array.isArray(postsResponse)
+        ? postsResponse
+        : Array.isArray(postsResponse?.results)
+        ? postsResponse.results
+        : [];
 
-        setProfileUser(user);
-        setPosts(userPosts.results);
-        setFollowers(userFollowers.results);
-        setFollowing(userFollowing.results);
-        setIsFollowing(user.is_following ?? false);
-        profileForm.reset({ username: user.username });
-      } catch (error) {
-        toast({
-          title: 'Erro',
-          description: 'Não foi possível carregar o perfil',
-          variant: 'destructive',
-        });
-        navigate('/');
-      } finally {
-        setIsLoading(false);
-      }
-    };
+      setPosts(normalizedPosts);
+
+      // ✅ FOLLOWERS
+      const normalizedFollowers: User[] = Array.isArray(userFollowers)
+        ? userFollowers
+        : Array.isArray(userFollowers?.results)
+        ? userFollowers.results
+        : [];
+
+      setFollowers(normalizedFollowers);
+
+      // ✅ FOLLOWING
+      const normalizedFollowing: User[] = Array.isArray(userFollowing)
+        ? userFollowing
+        : Array.isArray(userFollowing?.results)
+        ? userFollowing.results
+        : [];
+
+      setFollowing(normalizedFollowing);
+
+      setIsFollowing(user.is_following ?? false);
+
+      profileForm.reset({ username: user.username });
+    } catch (error) {
+      toast({
+        title: 'Erro',
+        description: 'Não foi possível carregar o perfil',
+        variant: 'destructive',
+      });
+
+      navigate('/');
+    } finally {
+      setIsLoading(false);
+    }
+  };
 
     loadProfile();
   }, [userId, isOwnProfile, currentUser, toast, navigate, profileForm]);
@@ -380,7 +408,7 @@ const Profile: React.FC = () => {
               {/* Stats */}
               <div className="flex gap-4 text-sm mb-3">
                 <span>
-                  <strong>{posts.length}</strong> postagens
+                  <strong>{posts?.length || 0}</strong> Postagens
                 </span>
                 <span>
                   <strong>{profileUser.followers_count}</strong> seguidores
@@ -431,10 +459,12 @@ const Profile: React.FC = () => {
           </TabsList>
 
           <TabsContent value="posts" className="mt-0">
-            {posts.length === 0 ? (
+            {!posts || posts.length === 0 ? (
               <p className="text-center text-muted-foreground py-8">Nenhuma postagem ainda</p>
             ) : (
-              posts.map((post) => <PostCard key={post.id} post={post} />)
+              posts.map((post, index) => (
+                <PostCard key={post.id ?? index} post={post} />
+              ))
             )}
           </TabsContent>
 

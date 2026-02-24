@@ -1,73 +1,131 @@
-// API Configuration for Django REST Framework Backend
-// CORREÇÃO: Removemos barras extras da URL base vinda do .env para evitar duplicação
+// ==============================
+// API Configuration
+// ==============================
+
+// Remove barra final da URL base (evita // no endpoint)
 const BASE = import.meta.env.VITE_API_URL || 'http://localhost:8000/api';
-const API_BASE_URL = BASE.endsWith('/') ? BASE.slice(0, -1) : BASE;
+export const API_BASE_URL = BASE.endsWith('/') ? BASE.slice(0, -1) : BASE;
+
+// Debug (remover em produção se quiser)
 console.log("BASE:", BASE);
-console.log("FINAL URL:", `${API_BASE_URL}/auth/login/`);
+console.log("API FINAL:", API_BASE_URL);
 
+// ==============================
+// Token
+// ==============================
 
-// Get the auth token from localStorage
 const getAuthToken = (): string | null => {
   return localStorage.getItem('auth_token');
 };
 
-/**
- * Generic fetch wrapper with auth headers
- * CORREÇÃO: Sanitização automática para evitar erros de caminhos repetidos ou barras duplas
- */
+// ==============================
+// Core Request Function
+// ==============================
+
 export const apiRequest = async <T>(
   endpoint: string,
   options: RequestInit = {}
 ): Promise<T> => {
   const token = getAuthToken();
-  
-  // CORREÇÃO: Garante que o endpoint comece com apenas uma barra
-  const cleanEndpoint = endpoint.startsWith('/') ? endpoint : `/${endpoint}`;
-  
+
+  // Garante formato correto da URL
+  const cleanEndpoint = endpoint.startsWith('/')
+    ? endpoint
+    : `/${endpoint}`;
+
+  const url = `${API_BASE_URL}${cleanEndpoint}`;
+
+  // Headers padrão
   const headers: HeadersInit = {
     'Content-Type': 'application/json',
     ...options.headers,
   };
 
+  // Token
   if (token) {
     (headers as Record<string, string>)['Authorization'] = `Token ${token}`;
   }
 
-  // A montagem final agora é protegida contra erros de digitação no .env ou no serviço
-  const response = await fetch(`${API_BASE_URL}${cleanEndpoint}`, {
+  // 🔥 GARANTE QUE SEMPRE TEM MÉTODO
+  const method = options.method || 'GET';
+
+  // Debug forte (ESSENCIAL PRA VOCÊ AGORA)
+  console.log("REQUEST:", {
+    url,
+    method,
+    body: options.body,
+  });
+
+  const response = await fetch(url, {
     ...options,
+    method,
     headers,
   });
 
-  // Lida com 204 No Content (ex: delete, like)
+  // 204 (sem conteúdo)
   if (response.status === 204) {
     return {} as T;
   }
 
-  // Valida se a resposta é JSON para evitar o erro "Unexpected token <"
+  // Verifica se é JSON
   const contentType = response.headers.get("content-type");
   let data: any;
 
   if (contentType && contentType.includes("application/json")) {
     data = await response.json();
   } else {
-    // Se o Django retornar HTML (erro 404 ou 500), capturamos como texto para depuração
-    const errorText = await response.text();
-    console.error("Erro crítico do servidor (HTML recebido):", errorText);
-    throw new Error(`Erro ${response.status}: O servidor não retornou JSON. Verifique se a rota ${cleanEndpoint} existe.`);
+    const text = await response.text();
+    console.error("HTML RECEBIDO:", text);
+    throw new Error(`Erro ${response.status}: resposta não é JSON`);
   }
 
-  // Lida com erros de validação do Django
+  // Erros do backend
   if (!response.ok) {
-    const errorMessage = 
-      data.detail || 
-      data.message || 
-      (typeof data === 'object' ? Object.values(data).flat().join(', ') : null) || 
+    const errorMessage =
+      data.detail ||
+      data.message ||
+      (typeof data === 'object'
+        ? Object.values(data).flat().join(', ')
+        : null) ||
       'Erro na requisição';
+
     throw new Error(errorMessage);
   }
 
   return data as T;
 };
 
-export { API_BASE_URL };
+// ==============================
+// AUTH (LOGIN)
+// ==============================
+
+export const login = async (username: string, password: string) => {
+  return apiRequest('/auth/login/', {
+    method: 'POST',
+    body: JSON.stringify({
+      username,
+      password,
+    }),
+  });
+};
+
+// ==============================
+// POSTS (EXEMPLOS)
+// ==============================
+
+export const getPosts = async () => {
+  return apiRequest('/posts/');
+};
+
+export const createPost = async (content: string) => {
+  return apiRequest('/posts/', {
+    method: 'POST',
+    body: JSON.stringify({ content }),
+  });
+};
+
+export const likePost = async (postId: number) => {
+  return apiRequest(`/posts/${postId}/like/`, {
+    method: 'POST',
+  });
+};
