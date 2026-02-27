@@ -21,12 +21,15 @@ const PostCard: React.FC<PostCardProps> = ({ post, onPostUpdate }) => {
   const [localPost, setLocalPost] = useState(post);
   const { toast } = useToast();
 
-  // CORREÇÃO: Removida a trava do !localPost.author
   if (!localPost) return null;
 
-  // Pegamos os dados do autor com segurança (Django envia username direto no post às vezes)
-  const authorName = localPost.username || (localPost.author as any)?.username || 'Usuário';
-  const authorId = (localPost.author as any)?.id || localPost.user_id || localPost.id;
+  // --- CORREÇÃO DE MAPEAMENTO ---
+  const author = localPost.author;
+  const authorName = author?.username || 'Usuário';
+  const authorId = author?.id; 
+  
+  // Aqui pegamos o avatar do objeto author enviado pelo seu UserSerializer
+  const authorAvatar = author?.avatar || author?.user_avatar || author?.profile_image;
 
   const handleLike = async () => {
     if (isLiking) return;
@@ -71,7 +74,6 @@ const PostCard: React.FC<PostCardProps> = ({ post, onPostUpdate }) => {
     onPostUpdate?.(updatedPost);
   };
 
-  // Proteção para a data
   const timeAgo = localPost.created_at 
     ? formatDistanceToNow(new Date(localPost.created_at), { addSuffix: true, locale: ptBR })
     : '';
@@ -80,11 +82,11 @@ const PostCard: React.FC<PostCardProps> = ({ post, onPostUpdate }) => {
     <article className="border-b border-border p-4 hover:bg-muted/50 transition-colors w-full bg-white dark:bg-transparent">
       <div className="flex gap-3">
         
-        {/* Avatar */}
+        {/* Avatar: Usando authorId para o link e authorAvatar para a imagem */}
         <Link to={`/profile/${authorId}`}>
           <Avatar className="h-12 w-12 border border-border">
             <AvatarImage
-              src={(localPost.author as any)?.profile_picture || ''}
+              src={authorAvatar || ''}
               alt={authorName}
             />
             <AvatarFallback className="bg-primary text-primary-foreground">

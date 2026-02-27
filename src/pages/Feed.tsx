@@ -6,6 +6,7 @@ import CreatePostForm from "@/components/CreatePostForm";
 import { postService } from "@/services/postService";
 import { useToast } from "@/hooks/use-toast";
 import type { Post } from "@/types";
+import { useAuth } from "@/context/AuthContext";
 
 const Feed: React.FC = () => {
   const [posts, setPosts] = useState<Post[]>([]);
@@ -14,57 +15,51 @@ const Feed: React.FC = () => {
   const [hasMore, setHasMore] = useState(false);
   const [page, setPage] = useState(1);
 
+  const { user } = useAuth();
   const { toast } = useToast();
   const observerRef = useRef<IntersectionObserver | null>(null);
   const loadMoreRef = useRef<HTMLDivElement | null>(null);
 
- // 1. Função de normalização estável
   const normalizeResponse = useCallback((data: any) => {
-    console.log("Feed: Normalizando dados...", data);
-    if (data && data.results && Array.isArray(data.results)) {
-      return { normalizedPosts: data.results, hasNext: Boolean(data.next) };
-    }
-    if (Array.isArray(data)) {
-      return { normalizedPosts: data, hasNext: false };
+    if (data && Array.isArray(data.results)) {
+      return {
+        normalizedPosts: data.results,
+        hasNext: Boolean(data.next),
+      };
     }
     return { normalizedPosts: [], hasNext: false };
   }, []);
 
-  // 2. useEffect simplificado para evitar loops
   useEffect(() => {
+    if (!user) return;
+
     let isMounted = true;
 
     const loadInitialPosts = async () => {
-      // Força o início do loading
+      setPosts([]);
       setIsLoading(true);
-      
+      setPage(1);
+
       try {
-        console.log("Feed: Iniciando busca de posts...");
         const response = await postService.getFeed(1);
-        
+
         if (isMounted) {
-          const { normalizedPosts, hasNext } = normalizeResponse(response);
-          console.log("Feed: Sucesso! Posts carregados:", normalizedPosts.length);
-          
+          const { normalizedPosts, hasNext } =
+            normalizeResponse(response);
+
           setPosts(normalizedPosts);
           setHasMore(hasNext);
-          setPage(1);
         }
       } catch (error) {
-        console.error("Feed: Erro na requisição:", error);
         if (isMounted) {
           toast({
-            title: "Erro de conexão",
+            title: "Erro ao carregar feed",
             description: "Não foi possível carregar os posts.",
             variant: "destructive",
           });
         }
       } finally {
-        // CORREÇÃO CRÍTICA: O setIsLoading(false) DEVE rodar por último
-        if (isMounted) {
-          console.log("Feed: Encerrando estado de loading.");
-          setIsLoading(false);
-        }
+        if (isMounted) setIsLoading(false);
       }
     };
 
@@ -73,29 +68,31 @@ const Feed: React.FC = () => {
     return () => {
       isMounted = false;
     };
-    // REMOVIDO: normalizeResponse e toast das dependências para evitar loop infinito
-  }, []);
-  // ➕ Criar novo post
+  }, [user, normalizeResponse, toast]);
+
   const handlePostCreated = (newPost: Post) => {
     setPosts((prev) => [newPost, ...prev]);
   };
 
-  // 🔄 Atualizar post (Like/Edit)
   const handlePostUpdate = (updatedPost: Post) => {
     setPosts((prev) =>
-      prev.map((post) => (post.id === updatedPost.id ? updatedPost : post))
+      prev.map((post) =>
+        post.id === updatedPost.id ? updatedPost : post
+      )
     );
   };
 
-  // 📄 Carregar mais (Infinite Scroll)
   const loadMore = useCallback(async () => {
     if (isLoadingMore || !hasMore) return;
 
     setIsLoadingMore(true);
+
     try {
       const nextPage = page + 1;
       const response = await postService.getFeed(nextPage);
-      const { normalizedPosts, hasNext } = normalizeResponse(response);
+
+      const { normalizedPosts, hasNext } =
+        normalizeResponse(response);
 
       setPosts((prev) => [...prev, ...normalizedPosts]);
       setHasMore(hasNext);
@@ -107,7 +104,6 @@ const Feed: React.FC = () => {
     }
   }, [page, hasMore, isLoadingMore, normalizeResponse]);
 
-  // 👀 Intersection Observer
   useEffect(() => {
     if (isLoading) return;
 
@@ -115,7 +111,11 @@ const Feed: React.FC = () => {
 
     observerRef.current = new IntersectionObserver(
       (entries) => {
-        if (entries[0].isIntersecting && hasMore && !isLoadingMore) {
+        if (
+          entries[0].isIntersecting &&
+          hasMore &&
+          !isLoadingMore
+        ) {
           loadMore();
         }
       },
@@ -144,29 +144,31 @@ const Feed: React.FC = () => {
           </div>
         ) : posts.length === 0 ? (
           <div className="text-center py-20 px-4">
-            <p className="text-muted-foreground text-lg">Seu feed está vazio.</p>
+            <p className="text-muted-foreground text-lg">
+              Seu feed está vazio.
+            </p>
           </div>
         ) : (
           <div className="divide-y divide-border">
-            {posts.map((post, index) => (
+            {posts.map((post) => (
               <PostCard
-                key={`${post.id}-${index}`} // Key única
+                key={post.id}
                 post={post}
                 onPostUpdate={handlePostUpdate}
               />
             ))}
 
             <div ref={loadMoreRef} className="py-8 min-h-[100px]">
-              {isLoadingMore ? (
+              {isLoadingMore && (
                 <div className="flex justify-center">
                   <Loader2 className="h-6 w-6 animate-spin text-primary" />
                 </div>
-              ) : (
-                !hasMore && (
-                  <p className="text-center text-muted-foreground text-sm">
-                    Você chegou ao fim do feed ✨
-                  </p>
-                )
+              )}
+
+              {!hasMore && !isLoadingMore && (
+                <p className="text-center text-muted-foreground text-sm">
+                  Você chegou ao fim do feed ✨
+                </p>
               )}
             </div>
           </div>

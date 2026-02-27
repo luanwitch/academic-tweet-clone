@@ -2,6 +2,9 @@
 // These match the expected Django REST Framework models
 
 export interface User {
+  profile_image: any;
+  user_avatar: any;
+  avatar: any;
   id: number;
   username: string;
   email: string;
@@ -13,6 +16,9 @@ export interface User {
 }
 
 export interface Post {
+  user: any;
+  user_id: any;
+  username: any;
   id: number;
   author: User;
   content: string;

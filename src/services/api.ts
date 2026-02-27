@@ -2,16 +2,11 @@
 // API Configuration
 // ==============================
 
-// Remove barra final da URL base (evita // no endpoint)
 const BASE = import.meta.env.VITE_API_URL || 'http://localhost:8000/api';
 export const API_BASE_URL = BASE.endsWith('/') ? BASE.slice(0, -1) : BASE;
 
-// Debug (remover em produção se quiser)
-console.log("BASE:", BASE);
-console.log("API FINAL:", API_BASE_URL);
-
 // ==============================
-// Token
+// Token Management
 // ==============================
 
 const getAuthToken = (): string | null => {
@@ -28,32 +23,29 @@ export const apiRequest = async <T>(
 ): Promise<T> => {
   const token = getAuthToken();
 
-  // Garante formato correto da URL
-  const cleanEndpoint = endpoint.startsWith('/')
-    ? endpoint
-    : `/${endpoint}`;
-
+  const cleanEndpoint = endpoint.startsWith('/') ? endpoint : `/${endpoint}`;
   const url = `${API_BASE_URL}${cleanEndpoint}`;
 
-  // Headers padrão
-  const headers: HeadersInit = {
-    'Content-Type': 'application/json',
-    ...options.headers,
-  };
+  // Prepara os headers
+  const headers = new Headers(options.headers);
 
-  // Token
-  if (token) {
-    (headers as Record<string, string>)['Authorization'] = `Token ${token}`;
+  // 🔥 AJUSTE CRUCIAL: Se o body NÃO for FormData, define JSON.
+  // Se FOR FormData (upload de imagem), deixamos o browser definir o Content-Type com o boundary.
+  if (!(options.body instanceof FormData)) {
+    if (!headers.has('Content-Type')) {
+      headers.set('Content-Type', 'application/json');
+    }
   }
 
-  // 🔥 GARANTE QUE SEMPRE TEM MÉTODO
+  // Adiciona o Token de Autorização se existir
+  if (token) {
+    headers.set('Authorization', `Token ${token}`);
+  }
+
   const method = options.method || 'GET';
 
-  // Debug forte (ESSENCIAL PRA VOCÊ AGORA)
-  console.log("REQUEST:", {
-    url,
-    method,
-    body: options.body,
+  console.log(`[API REQUEST] ${method} ${url}`, {
+    body: options.body instanceof FormData ? "FormData (Image)" : options.body,
   });
 
   const response = await fetch(url, {
@@ -62,12 +54,10 @@ export const apiRequest = async <T>(
     headers,
   });
 
-  // 204 (sem conteúdo)
   if (response.status === 204) {
     return {} as T;
   }
 
-  // Verifica se é JSON
   const contentType = response.headers.get("content-type");
   let data: any;
 
@@ -75,18 +65,19 @@ export const apiRequest = async <T>(
     data = await response.json();
   } else {
     const text = await response.text();
-    console.error("HTML RECEBIDO:", text);
-    throw new Error(`Erro ${response.status}: resposta não é JSON`);
+    // Se o backend der erro 500 ou erro de sintaxe, ele retorna HTML. Vamos logar para debugar.
+    if (!response.ok) {
+      console.error("ERRO DO SERVIDOR (HTML):", text);
+      throw new Error(`Erro ${response.status} no servidor.`);
+    }
+    data = text;
   }
 
-  // Erros do backend
   if (!response.ok) {
     const errorMessage =
-      data.detail ||
-      data.message ||
-      (typeof data === 'object'
-        ? Object.values(data).flat().join(', ')
-        : null) ||
+      data?.detail ||
+      data?.message ||
+      (typeof data === 'object' ? Object.values(data).flat().join(', ') : null) ||
       'Erro na requisição';
 
     throw new Error(errorMessage);
@@ -96,25 +87,22 @@ export const apiRequest = async <T>(
 };
 
 // ==============================
-// AUTH (LOGIN)
+// AUTH
 // ==============================
 
 export const login = async (username: string, password: string) => {
-  return apiRequest('/auth/login/', {
+  return apiRequest<{ token: string }>('/auth/login/', {
     method: 'POST',
-    body: JSON.stringify({
-      username,
-      password,
-    }),
+    body: JSON.stringify({ username, password }),
   });
 };
 
 // ==============================
-// POSTS (EXEMPLOS)
+// POSTS
 // ==============================
 
 export const getPosts = async () => {
-  return apiRequest('/posts/');
+  return apiRequest<any[]>('/posts/');
 };
 
 export const createPost = async (content: string) => {
@@ -124,8 +112,24 @@ export const createPost = async (content: string) => {
   });
 };
 
-export const likePost = async (postId: number) => {
-  return apiRequest(`/posts/${postId}/like/`, {
+// ==============================
+// PROFILE & AVATAR UPLOAD
+// ==============================
+
+/**
+ * Envia a imagem para o servidor.
+ * @param file O ficheiro de imagem vindo do <input type="file" />
+ */
+export const uploadAvatar = async (file: File) => {
+  const formData = new FormData();
+  formData.append('avatar', file); // 'avatar' deve coincidir com o nome no Django
+
+  return apiRequest('/profile/upload-avatar/', {
     method: 'POST',
+    body: formData, // Aqui o navegador trata o Content-Type automaticamente
   });
+};
+
+export const getProfile = async () => {
+  return apiRequest('/profile/');
 };
