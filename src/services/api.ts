@@ -10,8 +10,13 @@ export const API_BASE_URL = BASE.endsWith("/") ? BASE.slice(0, -1) : BASE;
 // Token Management
 // ==============================
 
-const getAuthToken = (): string | null => {
+export const getAuthToken = (): string | null => {
   return localStorage.getItem("auth_token");
+};
+
+export const setAuthToken = (token: string | null) => {
+  if (!token) localStorage.removeItem("auth_token");
+  else localStorage.setItem("auth_token", token);
 };
 
 // ==============================
@@ -29,7 +34,6 @@ export const apiRequest = async <T>(
   const cleanEndpoint = endpoint.startsWith("/") ? endpoint : `/${endpoint}`;
   const url = isAbsoluteUrl ? endpoint : `${API_BASE_URL}${cleanEndpoint}`;
 
-  // Headers
   const headers = new Headers(options.headers);
 
   // ✅ Se NÃO for FormData, assume JSON (mas respeita se já veio Content-Type)
@@ -93,14 +97,35 @@ export const apiRequest = async <T>(
 };
 
 // ==============================
+// TYPES
+// ==============================
+
+export type MeResponse = {
+  id: number;
+  username: string;
+  email: string;
+  avatar: string | null;
+  followers_count: number;
+  following_count: number;
+};
+
+export type UploadAvatarResponse = {
+  avatar: string; // url absoluta
+};
+
+// ==============================
 // AUTH
 // ==============================
 
 export const login = async (username: string, password: string) => {
-  return apiRequest<{ token: string }>("/auth/login/", {
+  const data = await apiRequest<{ token: string }>("/auth/login/", {
     method: "POST",
     body: JSON.stringify({ username, password }),
   });
+
+  // ✅ já salva o token aqui pra não depender do componente
+  setAuthToken(data.token);
+  return data;
 };
 
 // ==============================
@@ -119,19 +144,29 @@ export const createPost = async (content: string) => {
 };
 
 // ==============================
-// PROFILE & AVATAR UPLOAD
+// PROFILE & AVATAR
 // ==============================
+
+/**
+ * ✅ Corrigido: teu backend retorna o perfil em /users/me/
+ * (e não em /profile/)
+ */
+export const getProfile = async () => {
+  return apiRequest<MeResponse>("/users/me/");
+};
 
 export const uploadAvatar = async (file: File) => {
   const formData = new FormData();
   formData.append("avatar", file);
 
-  return apiRequest("/profile/upload-avatar/", {
+  const res = await apiRequest<UploadAvatarResponse>("/profile/upload-avatar/", {
     method: "POST",
     body: formData,
   });
-};
 
-export const getProfile = async () => {
-  return apiRequest("/profile/");
+  // ✅ Cache-buster: força o browser a recarregar a imagem após upload
+  return {
+    ...res,
+    avatar: res.avatar.includes("?") ? `${res.avatar}&v=${Date.now()}` : `${res.avatar}?v=${Date.now()}`,
+  };
 };

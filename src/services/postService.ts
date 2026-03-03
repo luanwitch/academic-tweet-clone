@@ -11,30 +11,59 @@ export interface PaginatedResponse<T> {
   results: T[];
 }
 
+type GetPostsParams = {
+  author?: number;
+  page?: number;
+};
+
+function buildQuery(params: Record<string, any>) {
+  const qs = new URLSearchParams();
+  Object.entries(params).forEach(([k, v]) => {
+    if (v === undefined || v === null || v === "") return;
+    qs.set(k, String(v));
+  });
+  const q = qs.toString();
+  return q ? `?${q}` : "";
+}
+
 export const postService = {
   /**
    * Get feed (posts from followed users)
    */
-  async getFeed(
-    page: number = 1
-  ): Promise<PaginatedResponse<Post>> {
-    return apiRequest<PaginatedResponse<Post>>(
-      `/feed/?page=${page}`
-    );
+  async getFeed(page: number = 1): Promise<PaginatedResponse<Post>> {
+    return apiRequest<PaginatedResponse<Post>>(`/feed/?page=${page}`);
   },
 
   /**
    * Get all posts or posts from a specific user
+   *
+   * ✅ Aceita 2 assinaturas:
+   * - getPosts(userId?: number, page?: number)
+   * - getPosts({ author?: number, page?: number })
    */
   async getPosts(
-    userId?: number,
+    userIdOrParams?: number | GetPostsParams,
     page: number = 1
   ): Promise<PaginatedResponse<Post>> {
-    const endpoint = userId
-      ? `/posts/?author=${userId}&page=${page}`
-      : `/posts/?page=${page}`;
+    // Modo novo: getPosts({ author, page })
+    if (
+      userIdOrParams &&
+      typeof userIdOrParams === "object" &&
+      !Array.isArray(userIdOrParams)
+    ) {
+      const author = userIdOrParams.author;
+      const p = userIdOrParams.page ?? 1;
 
-    return apiRequest<PaginatedResponse<Post>>(endpoint);
+      const query = buildQuery({ author, page: p });
+      return apiRequest<PaginatedResponse<Post>>(`/posts/${query}`);
+    }
+
+    // Modo antigo: getPosts(userId, page)
+    const userId =
+      typeof userIdOrParams === "number" ? userIdOrParams : undefined;
+
+    const query = buildQuery({ author: userId, page });
+    return apiRequest<PaginatedResponse<Post>>(`/posts/${query}`);
   },
 
   /**
@@ -74,18 +103,18 @@ export const postService = {
 
   /**
    * Get comments for a post
-   * (normalmente também pode ser paginado, mas mantendo simples por enquanto)
    */
-  getComments: async (postId: number): Promise<Comment[]> => {
+  async getComments(postId: number): Promise<Comment[]> {
     return apiRequest<Comment[]>(`/posts/${postId}/comments/`);
   },
+
   /**
    * Add comment to a post
    */
-  addComment: async (postId: number, content: string): Promise<Comment> => {
-  return apiRequest<Comment>(`/posts/${postId}/comments/`, {
-    method: "POST",
-    body: JSON.stringify({ content }),
-  });
+  async addComment(postId: number, content: string): Promise<Comment> {
+    return apiRequest<Comment>(`/posts/${postId}/comments/`, {
+      method: "POST",
+      body: JSON.stringify({ content }),
+    });
   },
-}
+};

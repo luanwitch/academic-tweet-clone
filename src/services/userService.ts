@@ -44,7 +44,7 @@ export const userService = {
   async unfollowUser(userId: number): Promise<void> {
     return apiRequest<void>(`/users/${userId}/follow/`, { method: "DELETE" });
   },
-
+  
   // Get user's followers
   async getFollowers(userId: number): Promise<PaginatedResponse<User>> {
     // Se teu backend retorna lista simples, troque o tipo para User[]
