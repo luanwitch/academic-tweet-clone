@@ -1,7 +1,5 @@
-// Post Service - Handles posts, likes, comments
-
 import { apiRequest } from "./api";
-import type { Post, Comment } from "@/types";
+import type { Comment, Post } from "@/types";
 
 /**
  * Paginated response padrão do Django REST Framework
@@ -78,25 +76,16 @@ export const postService = {
    * Get comments for a post
    * (normalmente também pode ser paginado, mas mantendo simples por enquanto)
    */
-  async getComments(postId: number): Promise<Comment[]> {
-    return apiRequest<Comment[]>(
-      `/posts/${postId}/comments/`
-    );
+  getComments: async (postId: number): Promise<Comment[]> => {
+    return apiRequest<Comment[]>(`/posts/${postId}/comments/`);
   },
-
   /**
    * Add comment to a post
    */
-  async addComment(
-    postId: number,
-    content: string
-  ): Promise<Comment> {
-    return apiRequest<Comment>(
-      `/posts/${postId}/comments/`,
-      {
-        method: "POST",
-        body: JSON.stringify({ content }),
-      }
-    );
+  addComment: async (postId: number, content: string): Promise<Comment> => {
+  return apiRequest<Comment>(`/posts/${postId}/comments/`, {
+    method: "POST",
+    body: JSON.stringify({ content }),
+  });
   },
-};
+}

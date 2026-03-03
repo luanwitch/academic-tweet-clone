@@ -26,20 +26,22 @@ const CommentSection: React.FC<CommentSectionProps> = ({ postId, onCommentAdded 
 
   // Load comments
   useEffect(() => {
-    const loadComments = async () => {
-      try {
-        const data = await postService.getComments(postId);
-        setComments(data);
-      } catch (error) {
-        toast({
-          title: 'Erro',
-          description: 'Não foi possível carregar os comentários',
-          variant: 'destructive',
-        });
-      } finally {
-        setIsLoading(false);
-      }
-    };
+   const loadComments = async () => {
+  setIsLoading(true);
+  try {
+    const data = await postService.getComments(postId); // Comment[]
+    setComments(Array.isArray(data) ? data : []);
+  } catch (error) {
+    toast({
+      title: "Erro",
+      description: "Não foi possível carregar os comentários",
+      variant: "destructive",
+    });
+    setComments([]);
+  } finally {
+    setIsLoading(false);
+  }
+};
 
     loadComments();
   }, [postId, toast]);
@@ -50,10 +52,16 @@ const CommentSection: React.FC<CommentSectionProps> = ({ postId, onCommentAdded 
 
     setIsSubmitting(true);
     try {
-      const comment = await postService.addComment(postId, newComment.trim());
-      setComments((prev) => [...prev, comment]);
+      const created = await postService.addComment(postId, newComment.trim());
+
+      // Pode vir objeto ou lista dependendo do backend
+      if (created) {
+        setComments((prev) => [...prev, created]);
+      }
+
       setNewComment('');
       onCommentAdded?.();
+
       toast({
         title: 'Sucesso',
         description: 'Comentário adicionado!',
@@ -112,33 +120,60 @@ const CommentSection: React.FC<CommentSectionProps> = ({ postId, onCommentAdded 
             Nenhum comentário ainda. Seja o primeiro!
           </p>
         ) : (
-          comments.map((comment) => (
-            <div key={comment.id} className="flex gap-2">
-              <Link to={`/profile/${comment.author.id}`}>
-                <Avatar className="h-8 w-8">
-                  <AvatarImage src={comment.author.profile_picture} alt={comment.author.username} />
-                  <AvatarFallback>{comment.author.username.charAt(0).toUpperCase()}</AvatarFallback>
-                </Avatar>
-              </Link>
-              <div className="flex-1 bg-muted rounded-lg p-2">
-                <div className="flex items-center gap-2 mb-1">
-                  <Link
-                    to={`/profile/${comment.author.id}`}
-                    className="font-medium text-sm hover:underline"
-                  >
-                    @{comment.author.username}
-                  </Link>
-                  <span className="text-muted-foreground text-xs">
-                    {formatDistanceToNow(new Date(comment.created_at), {
-                      addSuffix: true,
-                      locale: ptBR,
-                    })}
-                  </span>
+          comments.map((comment: any) => {
+            // ✅ Compatibilidade: author (frontend antigo) OU user (backend DRF)
+            const author = comment?.author ?? comment?.user ?? null;
+
+            const authorId =
+              author?.id ??
+              comment?.user_id ??
+              comment?.author_id ??
+              0;
+
+            const username =
+              author?.username ??
+              comment?.username ??
+              'Usuário';
+
+            const profilePicture =
+              author?.profile_picture ??
+              author?.avatar ??
+              author?.user_avatar ??
+              author?.profile_image ??
+              null;
+
+            const createdAt = comment?.created_at;
+
+            return (
+              <div key={comment?.id ?? `${createdAt}-${Math.random()}`} className="flex gap-2">
+                <Link to={`/profile/${authorId}`}>
+                  <Avatar className="h-8 w-8">
+                    <AvatarImage src={profilePicture ?? undefined} alt={username} />
+                    <AvatarFallback>{username.charAt(0).toUpperCase()}</AvatarFallback>
+                  </Avatar>
+                </Link>
+
+                <div className="flex-1 bg-muted rounded-lg p-2">
+                  <div className="flex items-center gap-2 mb-1">
+                    <Link to={`/profile/${authorId}`} className="font-medium text-sm hover:underline">
+                      @{username}
+                    </Link>
+
+                    {createdAt && (
+                      <span className="text-muted-foreground text-xs">
+                        {formatDistanceToNow(new Date(createdAt), {
+                          addSuffix: true,
+                          locale: ptBR,
+                        })}
+                      </span>
+                    )}
+                  </div>
+
+                  <p className="text-sm">{comment?.content ?? ''}</p>
                 </div>
-                <p className="text-sm">{comment.content}</p>
               </div>
-            </div>
-          ))
+            );
+          })
         )}
       </div>
     </div>

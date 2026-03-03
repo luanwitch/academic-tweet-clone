@@ -9,56 +9,44 @@ export const authService = {
       method: 'POST',
       body: JSON.stringify(credentials),
     });
-    
-    // Store token in localStorage
+
     if (response.token) {
       localStorage.setItem('auth_token', response.token);
     }
-    
+
     return response;
   },
 
-  // Register new user
+  // ✅ Register new user (rota correta do backend)
   async register(credentials: RegisterCredentials): Promise<AuthResponse> {
-    const response = await apiRequest<AuthResponse>('/auth/register/', {
+    const response = await apiRequest<AuthResponse>('/register/', {
       method: 'POST',
       body: JSON.stringify(credentials),
     });
-    
-    // Store token in localStorage
+
+    // Se seu backend NÃO retorna token no register, isso aqui só não faz nada (ok)
     if (response.token) {
       localStorage.setItem('auth_token', response.token);
     }
-    
+
     return response;
   },
 
-  // Logout user
+  // ✅ Logout (DRF Token padrão não tem logout)
   async logout(): Promise<void> {
-    try {
-      // O endpoint /auth/logout/ no Django deleta o Token no banco
-      await apiRequest('/auth/logout/', {
-        method: 'POST',
-      });
-    } catch (error) {
-      console.warn("Aviso: Falha ao informar logout ao servidor, limpando localmente...");
-    } finally {
-      // Sempre remove o token do navegador, mesmo se a rede falhar
-      localStorage.removeItem('auth_token');
-    }
+    // Só limpa localmente
+    localStorage.removeItem('auth_token');
   },
 
-  // Get current user profile (Dados que alimentam o AuthContext)
+  // Get current user profile
   async getCurrentUser(): Promise<User> {
     return apiRequest<User>('/users/me/');
   },
 
-  // Check if user is authenticated (Apenas verifica presença do Token)
   isAuthenticated(): boolean {
     return !!localStorage.getItem('auth_token');
   },
 
-  // Get stored token
   getToken(): string | null {
     return localStorage.getItem('auth_token');
   },

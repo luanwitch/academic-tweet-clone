@@ -20,14 +20,22 @@ const Feed: React.FC = () => {
   const observerRef = useRef<IntersectionObserver | null>(null);
   const loadMoreRef = useRef<HTMLDivElement | null>(null);
 
-  const normalizeResponse = useCallback((data: any) => {
-    if (data && Array.isArray(data.results)) {
-      return {
-        normalizedPosts: data.results,
-        hasNext: Boolean(data.next),
-      };
-    }
-    return { normalizedPosts: [], hasNext: false };
+const normalizeResponse = useCallback((data: any) => {
+  if (Array.isArray(data)) {
+    return {
+      normalizedPosts: data,
+      hasNext: false,
+    };
+  }
+
+  if (data && Array.isArray(data.results)) {
+    return {
+      normalizedPosts: data.results,
+      hasNext: Boolean(data.next),
+    };
+  }
+
+  return { normalizedPosts: [], hasNext: false };
   }, []);
 
   useEffect(() => {
