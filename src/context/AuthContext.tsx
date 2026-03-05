@@ -12,6 +12,7 @@ import type { User, LoginCredentials, RegisterCredentials } from "@/types";
 // ✅ 1 chave única no projeto inteiro
 const TOKEN_KEY = "auth_token";
 
+
 type AuthedUser = User & { token?: string | null };
 
 interface AuthContextType {

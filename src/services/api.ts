@@ -31,6 +31,17 @@ export const setAuthToken = (token: string | null) => {
   }
 };
 
+export const changePassword = async (old_password: string, new_password: string, new_password2: string) => {
+  const data = await apiRequest<{ message: string; token: string }>("/auth/change-password/", {
+    method: "POST",
+    body: JSON.stringify({ old_password, new_password, new_password2 }),
+  });
+
+  // ✅ atualiza token automaticamente
+  setAuthToken(data.token);
+  return data;
+};
+
 // ==============================
 // Core Request Function
 // ==============================
