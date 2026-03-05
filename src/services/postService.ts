@@ -30,7 +30,7 @@ export const postService = {
   /**
    * Get feed (posts from followed users)
    */
-  async getFeed(page: number = 1): Promise<PaginatedResponse<Post>> {
+  async getFeed(page: number = 1, PAGE_SIZE: number): Promise<PaginatedResponse<Post>> {
     return apiRequest<PaginatedResponse<Post>>(`/feed/?page=${page}`);
   },
 

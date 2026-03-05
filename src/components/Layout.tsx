@@ -1,10 +1,10 @@
 // Layout Component - Main app layout with sidebar navigation
-import React from 'react';
-import { Link, useLocation, useNavigate } from 'react-router-dom';
-import { Home, User, PenSquare, LogOut, Twitter } from 'lucide-react';
-import { useAuth } from '@/context/AuthContext';
-import { Button } from '@/components/ui/button';
-import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
+import React from "react";
+import { Link, useLocation, useNavigate } from "react-router-dom";
+import { Home, User, PenSquare, LogOut, Twitter, Users } from "lucide-react";
+import { useAuth } from "@/context/AuthContext";
+import { Button } from "@/components/ui/button";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 
 interface LayoutProps {
   children: React.ReactNode;
@@ -17,13 +17,14 @@ const Layout: React.FC<LayoutProps> = ({ children }) => {
 
   const handleLogout = async () => {
     await logout();
-    navigate('/login');
+    navigate("/login");
   };
 
   const navItems = [
-    { path: '/', icon: Home, label: 'Feed' },
-    { path: '/profile', icon: User, label: 'Perfil' },
-    { path: '/create', icon: PenSquare, label: 'Nova Postagem' },
+    { path: "/feed", icon: Home, label: "Feed" },
+    { path: "/users", icon: Users, label: "Usuários" }, // <-- NOVO: buscar/seguir/desseguir
+    { path: "/profile", icon: User, label: "Perfil" },
+    { path: "/create", icon: PenSquare, label: "Nova Postagem" },
   ];
 
   return (
@@ -49,8 +50,8 @@ const Layout: React.FC<LayoutProps> = ({ children }) => {
                     to={item.path}
                     className={`flex items-center gap-3 px-4 py-3 rounded-full transition-colors ${
                       isActive
-                        ? 'bg-primary text-primary-foreground font-semibold'
-                        : 'hover:bg-muted'
+                        ? "bg-primary text-primary-foreground font-semibold"
+                        : "hover:bg-muted"
                     }`}
                   >
                     <Icon className="h-5 w-5" />
@@ -65,12 +66,20 @@ const Layout: React.FC<LayoutProps> = ({ children }) => {
               <div className="border-t border-border pt-4 mt-4">
                 <div className="flex items-center gap-3 px-2 mb-3">
                   <Avatar className="h-10 w-10">
-                    <AvatarImage src={user.profile_picture} alt={user.username} />
-                    <AvatarFallback>{user.username.charAt(0).toUpperCase()}</AvatarFallback>
+                    {/* Ajuste: normalmente é user.avatar (não profile_picture) */}
+                    <AvatarImage
+                      src={(user as any).avatar || (user as any).profile_picture}
+                      alt={user.username}
+                    />
+                    <AvatarFallback>
+                      {user.username?.charAt(0)?.toUpperCase()}
+                    </AvatarFallback>
                   </Avatar>
                   <div className="flex-1 min-w-0">
                     <p className="font-medium truncate">@{user.username}</p>
-                    <p className="text-sm text-muted-foreground truncate">{user.email}</p>
+                    <p className="text-sm text-muted-foreground truncate">
+                      {user.email}
+                    </p>
                   </div>
                 </div>
                 <Button
@@ -97,7 +106,7 @@ const Layout: React.FC<LayoutProps> = ({ children }) => {
                   key={item.path}
                   to={item.path}
                   className={`flex flex-col items-center gap-1 p-2 ${
-                    isActive ? 'text-primary' : 'text-muted-foreground'
+                    isActive ? "text-primary" : "text-muted-foreground"
                   }`}
                 >
                   <Icon className="h-6 w-6" />

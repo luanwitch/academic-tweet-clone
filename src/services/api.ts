@@ -6,26 +6,46 @@
 const BASE = import.meta.env.VITE_API_URL || "http://localhost:8000/api";
 export const API_BASE_URL = BASE.endsWith("/") ? BASE.slice(0, -1) : BASE;
 
+
 // ==============================
 // Token Management
 // ==============================
+// Backend espera: Authorization: Token <token>
+// Vamos padronizar a chave como "token" (igual você já estava usando no debug)
+//    e manter compatibilidade com "auth_token" (pra não quebrar quem já tinha salvo).
+
+export const TOKEN_KEYS = ["token", "auth_token"] as const;
 
 export const getAuthToken = (): string | null => {
-  return localStorage.getItem("auth_token");
+  return localStorage.getItem("auth_token") || localStorage.getItem("token");
 };
 
 export const setAuthToken = (token: string | null) => {
-  if (!token) localStorage.removeItem("auth_token");
-  else localStorage.setItem("auth_token", token);
+  // limpa sempre as duas chaves pra evitar conflito
+  for (const k of TOKEN_KEYS) localStorage.removeItem(k);
+
+  if (token) {
+    // salva na chave principal usada no app
+    localStorage.setItem("auth_token", token);
+    localStorage.clear()
+  }
 };
 
 // ==============================
 // Core Request Function
 // ==============================
 
+type ApiRequestOptions = RequestInit & {
+  /**
+   * auth=true (padrão): envia Authorization se houver token
+   * auth=false: nunca envia Authorization (ex: login/register)
+   */
+  auth?: boolean;
+};
+
 export const apiRequest = async <T>(
   endpoint: string,
-  options: RequestInit = {}
+  options: ApiRequestOptions = {}
 ): Promise<T> => {
   const token = getAuthToken();
 
@@ -43,14 +63,17 @@ export const apiRequest = async <T>(
     }
   }
 
-  // Token (se existir)
-  if (token) {
+  // ✅ Token (se existir e não foi desativado)
+  const shouldSendAuth = options.auth !== false;
+  if (shouldSendAuth && token) {
     headers.set("Authorization", `Token ${token}`);
   }
 
   const method = options.method || "GET";
 
   console.log(`[API REQUEST] ${method} ${url}`, {
+    auth: shouldSendAuth ? "ON" : "OFF",
+    tokenPresent: Boolean(token),
     body: options.body instanceof FormData ? "FormData (Image)" : options.body,
   });
 
@@ -66,10 +89,10 @@ export const apiRequest = async <T>(
   }
 
   // Parse de resposta
-  const contentType = response.headers.get("content-type");
+  const contentType = response.headers.get("content-type") || "";
   let data: any;
 
-  if (contentType && contentType.includes("application/json")) {
+  if (contentType.includes("application/json")) {
     data = await response.json();
   } else {
     const text = await response.text();
@@ -85,6 +108,7 @@ export const apiRequest = async <T>(
     const errorMessage =
       data?.detail ||
       data?.message ||
+      data?.error ||
       (typeof data === "object"
         ? Object.values(data).flat().join(", ")
         : null) ||
@@ -118,12 +142,17 @@ export type UploadAvatarResponse = {
 // ==============================
 
 export const login = async (username: string, password: string) => {
-  const data = await apiRequest<{ token: string }>("/auth/login/", {
-    method: "POST",
-    body: JSON.stringify({ username, password }),
-  });
+  // ✅ login não envia Authorization
+  const data = await apiRequest<{ token: string; username?: string; user_id?: number }>(
+    "/auth/login/",
+    {
+      method: "POST",
+      body: JSON.stringify({ username, password }),
+      auth: false,
+    }
+  );
 
-  // ✅ já salva o token aqui pra não depender do componente
+  // ✅ salva token na chave "token"
   setAuthToken(data.token);
   return data;
 };
@@ -148,8 +177,7 @@ export const createPost = async (content: string) => {
 // ==============================
 
 /**
- * ✅ Corrigido: teu backend retorna o perfil em /users/me/
- * (e não em /profile/)
+ * ✅ teu backend retorna o perfil em /users/me/
  */
 export const getProfile = async () => {
   return apiRequest<MeResponse>("/users/me/");
@@ -167,6 +195,8 @@ export const uploadAvatar = async (file: File) => {
   // ✅ Cache-buster: força o browser a recarregar a imagem após upload
   return {
     ...res,
-    avatar: res.avatar.includes("?") ? `${res.avatar}&v=${Date.now()}` : `${res.avatar}?v=${Date.now()}`,
+    avatar: res.avatar.includes("?")
+      ? `${res.avatar}&v=${Date.now()}`
+      : `${res.avatar}?v=${Date.now()}`,
   };
 };

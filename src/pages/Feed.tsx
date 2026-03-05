@@ -8,6 +8,8 @@ import { useToast } from "@/hooks/use-toast";
 import type { Post } from "@/types";
 import { useAuth } from "@/context/AuthContext";
 
+const PAGE_SIZE = 10;
+
 const Feed: React.FC = () => {
   const [posts, setPosts] = useState<Post[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -17,61 +19,74 @@ const Feed: React.FC = () => {
 
   const { user } = useAuth();
   const { toast } = useToast();
+
   const observerRef = useRef<IntersectionObserver | null>(null);
   const loadMoreRef = useRef<HTMLDivElement | null>(null);
 
-const normalizeResponse = useCallback((data: any) => {
-  if (Array.isArray(data)) {
-    return {
-      normalizedPosts: data,
-      hasNext: false,
-    };
-  }
+  const normalizeResponse = useCallback((data: any) => {
+    if (Array.isArray(data)) {
+      return { normalizedPosts: data, hasNext: false };
+    }
 
-  if (data && Array.isArray(data.results)) {
-    return {
-      normalizedPosts: data.results,
-      hasNext: Boolean(data.next),
-    };
-  }
+    if (data && Array.isArray(data.results)) {
+      return {
+        normalizedPosts: data.results,
+        hasNext: Boolean(data.next),
+      };
+    }
 
-  return { normalizedPosts: [], hasNext: false };
+    return { normalizedPosts: [], hasNext: false };
   }, []);
+
+  const loadPage = useCallback(
+    async (pageToLoad: number, mode: "replace" | "append") => {
+      try {
+        const response = await postService.getFeed(pageToLoad, PAGE_SIZE);
+        const { normalizedPosts, hasNext } = normalizeResponse(response);
+
+        setHasMore(hasNext);
+        setPage(pageToLoad);
+
+        setPosts((prev) =>
+          mode === "replace" ? normalizedPosts : [...prev, ...normalizedPosts]
+        );
+      } catch (error) {
+        toast({
+          title: "Erro ao carregar feed",
+          description: "Não foi possível carregar os posts.",
+          variant: "destructive",
+        });
+      }
+    },
+    [normalizeResponse, toast]
+  );
 
   useEffect(() => {
     if (!user) return;
 
     let isMounted = true;
 
-    const loadInitialPosts = async () => {
-      setPosts([]);
+    (async () => {
       setIsLoading(true);
-      setPage(1);
-
       try {
-        const response = await postService.getFeed(1);
+        const response = await postService.getFeed(1, PAGE_SIZE);
+        if (!isMounted) return;
 
-        if (isMounted) {
-          const { normalizedPosts, hasNext } =
-            normalizeResponse(response);
-
-          setPosts(normalizedPosts);
-          setHasMore(hasNext);
-        }
-      } catch (error) {
-        if (isMounted) {
-          toast({
-            title: "Erro ao carregar feed",
-            description: "Não foi possível carregar os posts.",
-            variant: "destructive",
-          });
-        }
+        const { normalizedPosts, hasNext } = normalizeResponse(response);
+        setPosts(normalizedPosts);
+        setHasMore(hasNext);
+        setPage(1);
+      } catch (e) {
+        if (!isMounted) return;
+        toast({
+          title: "Erro ao carregar feed",
+          description: "Não foi possível carregar os posts.",
+          variant: "destructive",
+        });
       } finally {
         if (isMounted) setIsLoading(false);
       }
-    };
-
-    loadInitialPosts();
+    })();
 
     return () => {
       isMounted = false;
@@ -84,9 +99,7 @@ const normalizeResponse = useCallback((data: any) => {
 
   const handlePostUpdate = (updatedPost: Post) => {
     setPosts((prev) =>
-      prev.map((post) =>
-        post.id === updatedPost.id ? updatedPost : post
-      )
+      prev.map((post) => (post.id === updatedPost.id ? updatedPost : post))
     );
   };
 
@@ -94,23 +107,12 @@ const normalizeResponse = useCallback((data: any) => {
     if (isLoadingMore || !hasMore) return;
 
     setIsLoadingMore(true);
-
     try {
-      const nextPage = page + 1;
-      const response = await postService.getFeed(nextPage);
-
-      const { normalizedPosts, hasNext } =
-        normalizeResponse(response);
-
-      setPosts((prev) => [...prev, ...normalizedPosts]);
-      setHasMore(hasNext);
-      setPage(nextPage);
-    } catch (error) {
-      console.error("Erro ao carregar mais:", error);
+      await loadPage(page + 1, "append");
     } finally {
       setIsLoadingMore(false);
     }
-  }, [page, hasMore, isLoadingMore, normalizeResponse]);
+  }, [page, hasMore, isLoadingMore, loadPage]);
 
   useEffect(() => {
     if (isLoading) return;
@@ -119,11 +121,7 @@ const normalizeResponse = useCallback((data: any) => {
 
     observerRef.current = new IntersectionObserver(
       (entries) => {
-        if (
-          entries[0].isIntersecting &&
-          hasMore &&
-          !isLoadingMore
-        ) {
+        if (entries[0].isIntersecting && hasMore && !isLoadingMore) {
           loadMore();
         }
       },
@@ -153,7 +151,7 @@ const normalizeResponse = useCallback((data: any) => {
         ) : posts.length === 0 ? (
           <div className="text-center py-20 px-4">
             <p className="text-muted-foreground text-lg">
-              Seu feed está vazio.
+              Seu feed está vazio. Siga alguém para ver publicações 🙂
             </p>
           </div>
         ) : (

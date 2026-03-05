@@ -1,53 +1,66 @@
 // Authentication Service - Handles login, register, logout
-import { apiRequest } from './api';
-import type { AuthResponse, LoginCredentials, RegisterCredentials, User } from '@/types';
+import { apiRequest, setAuthToken, getAuthToken } from "./api";
+import type { AuthResponse, LoginCredentials, RegisterCredentials, User } from "@/types";
 
 export const authService = {
+  // ==============================
   // Login user and get token
+  // ==============================
   async login(credentials: LoginCredentials): Promise<AuthResponse> {
-    const response = await apiRequest<AuthResponse>('/auth/login/', {
-      method: 'POST',
+    const response = await apiRequest<AuthResponse>("/auth/login/", {
+      method: "POST",
       body: JSON.stringify(credentials),
+      auth: false, // login não deve enviar Authorization
     });
 
     if (response.token) {
-      localStorage.setItem('auth_token', response.token);
+      setAuthToken(response.token); // usa função centralizada do api.ts
     }
 
     return response;
   },
 
-  // ✅ Register new user (rota correta do backend)
+  // ==============================
+  // Register new user
+  // ==============================
   async register(credentials: RegisterCredentials): Promise<AuthResponse> {
-    const response = await apiRequest<AuthResponse>('/register/', {
-      method: 'POST',
+    const response = await apiRequest<AuthResponse>("/register/", {
+      method: "POST",
       body: JSON.stringify(credentials),
+      auth: false,
     });
 
-    // Se seu backend NÃO retorna token no register, isso aqui só não faz nada (ok)
+    // se backend retornar token já salva
     if (response.token) {
-      localStorage.setItem('auth_token', response.token);
+      setAuthToken(response.token);
     }
 
     return response;
   },
 
-  // ✅ Logout (DRF Token padrão não tem logout)
+  // ==============================
+  // Logout
+  // ==============================
   async logout(): Promise<void> {
-    // Só limpa localmente
-    localStorage.removeItem('auth_token');
+    // DRF Token Auth padrão não tem endpoint de logout
+    setAuthToken(null);
   },
 
+  // ==============================
   // Get current user profile
+  // ==============================
   async getCurrentUser(): Promise<User> {
-    return apiRequest<User>('/users/me/');
+    return apiRequest<User>("/users/me/");
   },
 
+  // ==============================
+  // Auth helpers
+  // ==============================
   isAuthenticated(): boolean {
-    return !!localStorage.getItem('auth_token');
+    return !!getAuthToken();
   },
 
   getToken(): string | null {
-    return localStorage.getItem('auth_token');
+    return getAuthToken();
   },
 };

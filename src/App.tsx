@@ -2,7 +2,7 @@ import { Toaster } from "@/components/ui/toaster";
 import { Toaster as Sonner } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { BrowserRouter, Routes, Route } from "react-router-dom";
+import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import { AuthProvider } from "@/context/AuthContext";
 import ProtectedRoute from "@/components/ProtectedRoute";
 import Login from "./pages/Login";
@@ -11,6 +11,8 @@ import Feed from "./pages/Feed";
 import Profile from "./pages/Profile";
 import CreatePost from "./pages/CreatePost";
 import NotFound from "./pages/NotFound";
+import Users from "@/pages/Users";
+
 
 const queryClient = new QueryClient();
 
@@ -22,17 +24,21 @@ const App = () => (
         <Sonner />
         <BrowserRouter>
           <Routes>
-            {/* Public routes */}
-            <Route path="/login" element={<Login />} />
-            <Route path="/register" element={<Register />} />
-            
-            {/* Protected routes */}
-            <Route path="/" element={<ProtectedRoute><Feed /></ProtectedRoute>} />
-            <Route path="/profile" element={<ProtectedRoute><Profile /></ProtectedRoute>} />
-            <Route path="/profile/:id" element={<ProtectedRoute><Profile /></ProtectedRoute>} />
-            <Route path="/create" element={<ProtectedRoute><CreatePost /></ProtectedRoute>} />
-            
-            <Route path="*" element={<NotFound />} />
+                  {/* Public routes */}
+                  <Route path="/login" element={<Login />} />
+                  <Route path="/register" element={<Register />} />
+                  <Route path="/users" element={<Users />} />
+
+                  {/*alias do feed */}
+                  <Route path="/feed" element={<Navigate to="/" replace />} />
+
+                  {/* Protected routes */}
+                  <Route path="/" element={<ProtectedRoute><Feed /></ProtectedRoute>} />
+                  <Route path="/profile" element={<ProtectedRoute><Profile /></ProtectedRoute>} />
+                  <Route path="/profile/:id" element={<ProtectedRoute><Profile /></ProtectedRoute>} />
+                  <Route path="/create" element={<ProtectedRoute><CreatePost /></ProtectedRoute>} />
+
+                  <Route path="*" element={<NotFound />} />
           </Routes>
         </BrowserRouter>
       </TooltipProvider>
