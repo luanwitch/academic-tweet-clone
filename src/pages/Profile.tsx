@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useRef, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState, useCallback } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { Camera, Loader2 } from "lucide-react";
 import Layout from "@/components/Layout";
@@ -23,10 +23,13 @@ const Profile: React.FC = () => {
   const [posts, setPosts] = useState<Post[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isUpdating, setIsUpdating] = useState(false);
-
-  // ✅ estado de follow
   const [isFollowLoading, setIsFollowLoading] = useState(false);
-  const [isFollowing, setIsFollowing] = useState<boolean>(false);
+  const [isFollowing, setIsFollowing] = useState(false);
+
+  const [isEditing, setIsEditing] = useState(false);
+  const [formUsername, setFormUsername] = useState("");
+  const [formBio, setFormBio] = useState("");
+  const [isSavingProfile, setIsSavingProfile] = useState(false);
 
   const isOwnProfile = useMemo(() => {
     if (!id) return true;
@@ -36,43 +39,53 @@ const Profile: React.FC = () => {
 
   const userId = useMemo(() => {
     if (isOwnProfile) return currentUser?.id ?? null;
-    const n = Number(id);
-    return Number.isFinite(n) && n > 0 ? n : null;
-  }, [isOwnProfile, currentUser?.id, id]);
 
-  const resolveAvatarUrl = (u: any) => {
-    const raw = u?.user_avatar || u?.avatar || u?.profile_image || null;
+    const parsed = Number(id);
+    return Number.isFinite(parsed) && parsed > 0 ? parsed : null;
+  }, [id, isOwnProfile, currentUser?.id]);
+
+  const resolveAvatarUrl = (user: Partial<User> & Record<string, unknown>) => {
+    const raw =
+      (user.user_avatar as string | undefined) ||
+      (user.avatar as string | undefined) ||
+      (user.profile_image as string | undefined) ||
+      null;
+
     if (!raw) return undefined;
     if (/^https?:\/\//i.test(raw)) return raw;
 
     const apiBase = (import.meta.env.VITE_API_URL as string) || "";
     const backendHost = apiBase.replace(/\/api\/?$/, "");
+
     return `${backendHost}${raw.startsWith("/") ? "" : "/"}${raw}`;
   };
 
-  // ✅ buscar posts SEMPRE por author=<id>
-  const fetchPostsByAuthor = async (authorId: number) => {
-    // ajuste para sua assinatura real do postService
-    return (postService as any).getPosts({ author: authorId });
-  };
-
-  // ✅ detectar se eu já sigo esse usuário (sem depender do backend mandar flag)
   const computeIsFollowing = (targetId: number) => {
-    // se seu currentUser já vier com following_ids ou following list
-    const cu: any = currentUser as any;
-    const list = cu?.following_ids || cu?.following || [];
-    if (Array.isArray(list)) {
-      // pode ser array de ids ou array de users
-      return list.some((x: any) => Number(x?.id ?? x) === Number(targetId));
-    }
-    return false;
+    const cu = currentUser as (User & Record<string, unknown>) | null;
+    const list =
+      (cu?.following_ids as unknown[]) ||
+      (cu?.following as unknown[]) ||
+      [];
+
+    if (!Array.isArray(list)) return false;
+
+    return list.some((item) => {
+      if (typeof item === "object" && item !== null && "id" in item) {
+        return Number((item as { id: number }).id) === Number(targetId);
+      }
+      return Number(item) === Number(targetId);
+    });
   };
 
-  const loadProfile = async () => {
+  const loadProfile = useCallback(async () => {
     if (isOwnProfile && !currentUser?.id) return;
 
     if (!userId) {
-      toast({ title: "Erro", description: "Usuário inválido", variant: "destructive" });
+      toast({
+        title: "Erro",
+        description: "Usuário inválido",
+        variant: "destructive",
+      });
       navigate("/");
       return;
     }
@@ -81,18 +94,25 @@ const Profile: React.FC = () => {
 
     try {
       const user = isOwnProfile
-        ? (currentUser as User)
+        ? await userService.getMe()
         : await userService.getUser(userId);
 
       setProfileUser(user);
+      setFormUsername(user.username ?? "");
+      setFormBio(user.bio ?? "");
 
-      // follow status
-      if (!isOwnProfile) setIsFollowing(computeIsFollowing(userId));
+      if (!isOwnProfile) {
+        if (typeof user.is_following === "boolean") {
+          setIsFollowing(user.is_following);
+        } else {
+          setIsFollowing(computeIsFollowing(userId));
+        }
+      }
 
-      // posts
-      const postsResponse = await postService.getPosts({ author: userId, page: 1 });
-      setPosts(Array.isArray(postsResponse?.results) ? postsResponse.results : []);
-    } catch {
+      const authorPosts = await postService.getPostsByAuthorList(userId, 1);
+      setPosts(authorPosts);
+    } catch (error) {
+      console.error("Erro ao carregar perfil:", error);
       toast({
         title: "Erro",
         description: "Não foi possível carregar o perfil",
@@ -102,23 +122,31 @@ const Profile: React.FC = () => {
     } finally {
       setIsLoading(false);
     }
-  };
+  }, [isOwnProfile, currentUser?.id, userId, toast, navigate]);
 
   useEffect(() => {
-    loadProfile();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [userId, isOwnProfile, currentUser?.id]);
+    void loadProfile();
+  }, [loadProfile]);
 
-  const handleProfilePictureChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleProfilePictureChange = async (
+    e: React.ChangeEvent<HTMLInputElement>
+  ) => {
     const file = e.target.files?.[0];
     if (!file) return;
 
     setIsUpdating(true);
+
     try {
       await userService.uploadAvatar(file);
       await refreshUser();
-      toast({ title: "Sucesso", description: "Foto atualizada!" });
-    } catch {
+      await loadProfile();
+
+      toast({
+        title: "Sucesso",
+        description: "Foto atualizada!",
+      });
+    } catch (error) {
+      console.error("Erro ao atualizar foto:", error);
       toast({
         title: "Erro",
         description: "Não foi possível atualizar a foto",
@@ -126,33 +154,80 @@ const Profile: React.FC = () => {
       });
     } finally {
       setIsUpdating(false);
-      if (fileInputRef.current) fileInputRef.current.value = "";
+
+      if (fileInputRef.current) {
+        fileInputRef.current.value = "";
+      }
     }
   };
 
-  // ✅ Seguir/Deixar de seguir
+  const handleSaveProfile = async () => {
+    const trimmedUsername = formUsername.trim();
+    const trimmedBio = formBio.trim();
+
+    if (!trimmedUsername) {
+      toast({
+        title: "Erro",
+        description: "O nome de usuário não pode ficar vazio.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    setIsSavingProfile(true);
+
+    try {
+      const updatedUser = await userService.updateProfile({
+        username: trimmedUsername,
+        bio: trimmedBio,
+      });
+
+      setProfileUser(updatedUser);
+      await refreshUser();
+      setIsEditing(false);
+
+      toast({
+        title: "Sucesso",
+        description: "Perfil atualizado com sucesso!",
+      });
+    } catch (error) {
+      console.error("Erro ao atualizar perfil:", error);
+      toast({
+        title: "Erro",
+        description: "Não foi possível atualizar o perfil.",
+        variant: "destructive",
+      });
+    } finally {
+      setIsSavingProfile(false);
+    }
+  };
+
   const handleToggleFollow = async () => {
     if (!userId || isOwnProfile) return;
 
     setIsFollowLoading(true);
+
     try {
       if (isFollowing) {
-        // ✅ endpoint do backend (veja abaixo em userService)
-        await (userService as any).unfollowUser(userId);
+        await userService.unfollowUser(userId);
         setIsFollowing(false);
-        toast({ title: "Ok", description: "Você deixou de seguir." });
+        toast({
+          title: "Ok",
+          description: "Você deixou de seguir.",
+        });
       } else {
-        await (userService as any).followUser(userId);
+        await userService.followUser(userId);
         setIsFollowing(true);
-        toast({ title: "Ok", description: "Agora você está seguindo!" });
+        toast({
+          title: "Ok",
+          description: "Agora você está seguindo!",
+        });
       }
 
-      // ✅ atualiza o currentUser (pra manter estado coerente)
       await refreshUser();
-
-      // ✅ importante: recarrega posts (se o backend só libera após seguir)
       await loadProfile();
-    } catch {
+    } catch (error) {
+      console.error("Erro ao alterar follow:", error);
       toast({
         title: "Erro",
         description: "Não foi possível alterar o follow",
@@ -174,13 +249,15 @@ const Profile: React.FC = () => {
     );
   }
 
-  const avatar = resolveAvatarUrl(profileUser);
+  const avatar = resolveAvatarUrl(
+    profileUser as Partial<User> & Record<string, unknown>
+  );
 
   return (
     <Layout>
       <div className="p-4">
         <div className="flex gap-4 items-start justify-between">
-          <div className="flex gap-4 items-start">
+          <div className="flex gap-4 items-start flex-1">
             <div className="relative">
               <Avatar className="h-24 w-24">
                 <AvatarImage
@@ -206,6 +283,7 @@ const Profile: React.FC = () => {
                     className="absolute bottom-0 right-0 bg-primary p-2 rounded-full"
                     disabled={isUpdating}
                     aria-label="Alterar foto do perfil"
+                    type="button"
                   >
                     {isUpdating ? (
                       <Loader2 className="h-4 w-4 animate-spin" />
@@ -217,13 +295,98 @@ const Profile: React.FC = () => {
               )}
             </div>
 
-            <div>
-              <h2 className="text-xl font-bold">@{profileUser.username}</h2>
+            <div className="flex-1">
+              {isOwnProfile && isEditing ? (
+                <div className="space-y-3">
+                  <div>
+                    <label className="block text-sm font-medium mb-1">
+                      Nome de usuário
+                    </label>
+                    <input
+                      type="text"
+                      value={formUsername}
+                      onChange={(e) => setFormUsername(e.target.value)}
+                      className="w-full rounded-md border border-border bg-background px-3 py-2 text-sm outline-none"
+                      placeholder="Seu nome de usuário"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium mb-1">Bio</label>
+                    <textarea
+                      value={formBio}
+                      onChange={(e) => setFormBio(e.target.value)}
+                      className="w-full rounded-md border border-border bg-background px-3 py-2 text-sm outline-none min-h-[90px]"
+                      placeholder="Fale um pouco sobre você"
+                    />
+                  </div>
+
+                  <div className="flex gap-2">
+                    <Button
+                      onClick={handleSaveProfile}
+                      disabled={isSavingProfile}
+                      type="button"
+                    >
+                      {isSavingProfile ? (
+                        <>
+                          <Loader2 className="h-4 w-4 animate-spin mr-2" />
+                          Salvando
+                        </>
+                      ) : (
+                        "Salvar"
+                      )}
+                    </Button>
+
+                    <Button
+                      type="button"
+                      variant="outline"
+                      onClick={() => {
+                        setFormUsername(profileUser.username ?? "");
+                        setFormBio(profileUser.bio ?? "");
+                        setIsEditing(false);
+                      }}
+                      disabled={isSavingProfile}
+                    >
+                      Cancelar
+                    </Button>
+                  </div>
+                </div>
+              ) : (
+                <>
+                  <h2 className="text-xl font-bold">@{profileUser.username}</h2>
+
+                  {profileUser.bio ? (
+                    <p className="mt-2 text-sm text-muted-foreground">
+                      {profileUser.bio}
+                    </p>
+                  ) : null}
+
+                  <div className="mt-2 flex gap-4 text-sm text-muted-foreground">
+                    <span>{profileUser.followers_count ?? 0} seguidores</span>
+                    <span>{profileUser.following_count ?? 0} seguindo</span>
+                  </div>
+                </>
+              )}
             </div>
           </div>
 
-          {/* ✅ BOTÃO SEGUIR */}
-          {!isOwnProfile && (
+          {isOwnProfile ? (
+            <Button
+              type="button"
+              variant={isEditing ? "outline" : "default"}
+              onClick={() => {
+                if (isEditing) {
+                  setFormUsername(profileUser.username ?? "");
+                  setFormBio(profileUser.bio ?? "");
+                  setIsEditing(false);
+                } else {
+                  setIsEditing(true);
+                }
+              }}
+            >
+              {isEditing ? "Fechar edição" : "Editar perfil"}
+            </Button>
+          ) : (
             <Button
               onClick={handleToggleFollow}
               disabled={isFollowLoading}

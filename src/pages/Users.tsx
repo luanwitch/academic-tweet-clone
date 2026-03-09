@@ -1,7 +1,8 @@
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useState } from "react";
 import Layout from "@/components/Layout";
 import { useAuth } from "@/context/AuthContext";
 import { useToast } from "@/hooks/use-toast";
+import { apiRequest, getAuthToken } from "@/services/api";
 
 type ApiUser = {
   id: number;
@@ -9,31 +10,9 @@ type ApiUser = {
   email?: string;
   avatar?: string | null;
   is_following?: boolean;
+  followers_count?: number;
+  following_count?: number;
 };
-
-const API_URL = import.meta.env.VITE_API_URL;
-
-function getTokenSafe(auth: any) {
-  const t =
-    auth?.token ||
-    auth?.authToken ||
-    auth?.accessToken ||
-    auth?.user?.token ||
-    auth?.user?.authToken ||
-    auth?.user?.accessToken ||
-    localStorage.getItem("auth_token") ||
-    localStorage.getItem("authToken") ||
-    localStorage.getItem("accessToken");
-
-  return t || null;
-}
-
-function buildHeaders(auth: any) {
-  const tk = getTokenSafe(auth);
-  const headers: Record<string, string> = { "Content-Type": "application/json" };
-  if (tk) headers.Authorization = `Token ${tk}`;
-  return { headers, tk };
-}
 
 const Users: React.FC = () => {
   const { toast } = useToast();
@@ -42,8 +21,6 @@ const Users: React.FC = () => {
   const meId =
     Number(auth?.user?.user_id ?? auth?.user?.id ?? auth?.user_id ?? auth?.id) || null;
 
-  const { headers: authHeaders, tk } = useMemo(() => buildHeaders(auth), [auth]);
-
   const [q, setQ] = useState("");
   const [loading, setLoading] = useState(false);
   const [items, setItems] = useState<ApiUser[]>([]);
@@ -51,10 +28,9 @@ const Users: React.FC = () => {
   const [followingMap, setFollowingMap] = useState<Record<number, boolean>>({});
 
   useEffect(() => {
-    // debug curto (remove depois)
-    console.log("[Users] token:", tk);
+    console.log("[Users] token:", getAuthToken());
     console.log("[Users] meId:", meId);
-  }, [tk, meId]);
+  }, [meId]);
 
   const applyItems = (list: ApiUser[]) => {
     const filtered = meId ? list.filter((u) => u.id !== meId) : list;
@@ -62,24 +38,32 @@ const Users: React.FC = () => {
     setItems(filtered);
     setFollowingMap((prev) => {
       const next = { ...prev };
+
       for (const u of filtered) {
-        if (typeof u.is_following === "boolean") next[u.id] = u.is_following;
-        else if (next[u.id] === undefined) next[u.id] = false;
+        if (typeof u.is_following === "boolean") {
+          next[u.id] = u.is_following;
+        } else if (next[u.id] === undefined) {
+          next[u.id] = false;
+        }
       }
+
       return next;
     });
   };
 
   const loadInitial = async () => {
     setLoading(true);
-    try {
-      const res = await fetch(`${API_URL}/users/`, { headers: authHeaders });
-      if (!res.ok) throw new Error("Falha ao listar usuários");
 
-      const data = await res.json();
+    try {
+      const data = await apiRequest<{ results?: ApiUser[] } | ApiUser[]>("/users/", {
+        method: "GET",
+        auth: true,
+      });
+
       const list: ApiUser[] = Array.isArray(data) ? data : data?.results || [];
       applyItems(list);
-    } catch {
+    } catch (error) {
+      console.error("Erro ao listar usuários:", error);
       toast({
         title: "Erro",
         description: "Não foi possível listar usuários.",
@@ -91,34 +75,30 @@ const Users: React.FC = () => {
   };
 
   const searchUsers = async (term: string) => {
-    const t = term.trim();
-    if (!t) return loadInitial();
+    const searchTerm = term.trim();
+
+    if (!searchTerm) {
+      return loadInitial();
+    }
 
     setLoading(true);
+
     try {
-      if (!tk) throw new Error("NO_TOKEN");
+      const data = await apiRequest<ApiUser[] | { results?: ApiUser[] }>(
+        `/users/search/?q=${encodeURIComponent(searchTerm)}`,
+        {
+          method: "GET",
+          auth: true,
+        }
+      );
 
-      const res = await fetch(`${API_URL}/users/search/?q=${encodeURIComponent(t)}`, {
-        headers: authHeaders,
-      });
-
-      if (!res.ok) {
-        if (res.status === 401) throw new Error("401");
-        throw new Error("Falha ao buscar usuários");
-      }
-
-      const data = await res.json();
       const list: ApiUser[] = Array.isArray(data) ? data : data?.results || [];
       applyItems(list);
-    } catch (e: any) {
+    } catch (error) {
+      console.error("Erro ao buscar usuários:", error);
       toast({
         title: "Erro",
-        description:
-          e?.message === "NO_TOKEN"
-            ? "Sem token. Faça login novamente (token não foi salvo)."
-            : e?.message === "401"
-              ? "Não autorizado (token inválido/ausente). Faça login novamente."
-              : "Não foi possível buscar usuários.",
+        description: "Não foi possível buscar usuários.",
         variant: "destructive",
       });
     } finally {
@@ -128,45 +108,42 @@ const Users: React.FC = () => {
 
   useEffect(() => {
     loadInitial();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   useEffect(() => {
-    const id = window.setTimeout(() => searchUsers(q), 350);
+    const id = window.setTimeout(() => {
+      searchUsers(q);
+    }, 350);
+
     return () => window.clearTimeout(id);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [q]);
 
   const follow = async (userId: number) => {
     try {
-      if (!tk) {
+      const token = getAuthToken();
+
+      if (!token) {
         toast({
           title: "Sem login",
-          description: "Seu token não está salvo. Faça login de novo.",
+          description: "Seu token não está salvo. Faça login novamente.",
           variant: "destructive",
         });
         return;
       }
 
       setBusyId(userId);
-      const res = await fetch(`${API_URL}/users/${userId}/follow/`, {
+
+      await apiRequest(`/users/${userId}/follow/`, {
         method: "POST",
-        headers: authHeaders,
+        auth: true,
       });
 
-      if (!res.ok) {
-        if (res.status === 401) throw new Error("401");
-        throw new Error("Falha ao seguir");
-      }
-
       setFollowingMap((prev) => ({ ...prev, [userId]: true }));
-    } catch (e: any) {
+    } catch (error) {
+      console.error("Erro ao seguir usuário:", error);
       toast({
         title: "Erro",
-        description:
-          e?.message === "401"
-            ? "Não autorizado (token inválido/ausente). Faça login de novo."
-            : "Não foi possível seguir esse usuário.",
+        description: "Não foi possível seguir esse usuário.",
         variant: "destructive",
       });
     } finally {
@@ -176,34 +153,30 @@ const Users: React.FC = () => {
 
   const unfollow = async (userId: number) => {
     try {
-      if (!tk) {
+      const token = getAuthToken();
+
+      if (!token) {
         toast({
           title: "Sem login",
-          description: "Seu token não está salvo. Faça login de novo.",
+          description: "Seu token não está salvo. Faça login novamente.",
           variant: "destructive",
         });
         return;
       }
 
       setBusyId(userId);
-      const res = await fetch(`${API_URL}/users/${userId}/follow/`, {
+
+      await apiRequest(`/users/${userId}/follow/`, {
         method: "DELETE",
-        headers: authHeaders,
+        auth: true,
       });
 
-      if (!res.ok && res.status !== 204) {
-        if (res.status === 401) throw new Error("401");
-        throw new Error("Falha ao deixar de seguir");
-      }
-
       setFollowingMap((prev) => ({ ...prev, [userId]: false }));
-    } catch (e: any) {
+    } catch (error) {
+      console.error("Erro ao deixar de seguir:", error);
       toast({
         title: "Erro",
-        description:
-          e?.message === "401"
-            ? "Não autorizado (token inválido/ausente). Faça login de novo."
-            : "Não foi possível deixar de seguir esse usuário.",
+        description: "Não foi possível deixar de seguir esse usuário.",
         variant: "destructive",
       });
     } finally {
@@ -243,14 +216,25 @@ const Users: React.FC = () => {
               return (
                 <div key={u.id} className="p-4 flex items-center justify-between gap-4">
                   <div className="flex items-center gap-3">
-                    <div className="h-10 w-10 rounded-full overflow-hidden bg-muted">
+                    <div className="h-10 w-10 rounded-full overflow-hidden bg-muted flex items-center justify-center">
                       {u.avatar ? (
-                        <img src={u.avatar} alt={u.username} className="h-full w-full object-cover" />
-                      ) : null}
+                        <img
+                          src={u.avatar}
+                          alt={u.username}
+                          className="h-full w-full object-cover"
+                        />
+                      ) : (
+                        <span className="text-sm font-semibold">
+                          {u.username?.charAt(0)?.toUpperCase() || "U"}
+                        </span>
+                      )}
                     </div>
+
                     <div>
                       <div className="font-semibold">@{u.username}</div>
-                      {u.email ? <div className="text-xs text-muted-foreground">{u.email}</div> : null}
+                      {u.email ? (
+                        <div className="text-xs text-muted-foreground">{u.email}</div>
+                      ) : null}
                     </div>
                   </div>
 

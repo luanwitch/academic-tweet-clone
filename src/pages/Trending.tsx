@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback, useRef } from "react";
+import React, { useEffect, useRef, useState, useCallback } from "react";
 import { Loader2 } from "lucide-react";
 import Layout from "@/components/Layout";
 import PostCard from "@/components/PostCard";
@@ -48,23 +48,23 @@ const Feed: React.FC = () => {
   }, []);
 
   const loadPage = useCallback(
-    async (pageToLoad: number, mode: "replace" | "append") => {
+    async (
+      pageToLoad: number,
+      mode: "replace" | "append",
+      term: string = ""
+    ) => {
       try {
         let normalizedPosts: Post[] = [];
         let nextPageExists = false;
+        const trimmedTerm = term.trim();
 
-        if (searchTerm.trim()) {
-          const response = await postService.searchPosts(
-            searchTerm.trim(),
-            pageToLoad
-          );
-
+        if (trimmedTerm) {
+          const response = await postService.searchPosts(trimmedTerm, pageToLoad);
           const normalized = normalizeResponse(response);
           normalizedPosts = normalized.normalizedPosts;
           nextPageExists = normalized.hasNext;
         } else {
           const response = await postService.getFeed(pageToLoad, PAGE_SIZE);
-
           const normalized = normalizeResponse(response);
           normalizedPosts = normalized.normalizedPosts;
           nextPageExists = normalized.hasNext;
@@ -72,11 +72,8 @@ const Feed: React.FC = () => {
 
         setHasMore(nextPageExists);
         setPage(pageToLoad);
-
         setPosts((prev) =>
-          mode === "replace"
-            ? normalizedPosts
-            : [...prev, ...normalizedPosts]
+          mode === "replace" ? normalizedPosts : [...prev, ...normalizedPosts]
         );
       } catch {
         toast({
@@ -86,7 +83,7 @@ const Feed: React.FC = () => {
         });
       }
     },
-    [normalizeResponse, searchTerm, toast]
+    [normalizeResponse, toast]
   );
 
   useEffect(() => {
@@ -102,17 +99,14 @@ const Feed: React.FC = () => {
 
     const fetchInitial = async () => {
       setIsLoading(true);
-
       try {
-        await loadPage(1, "replace");
+        await loadPage(1, "replace", "");
       } finally {
-        if (isMounted) {
-          setIsLoading(false);
-        }
+        if (isMounted) setIsLoading(false);
       }
     };
 
-    fetchInitial();
+    void fetchInitial();
 
     return () => {
       isMounted = false;
@@ -129,13 +123,12 @@ const Feed: React.FC = () => {
 
     const timeout = setTimeout(async () => {
       setIsLoading(true);
-
       try {
-        await loadPage(1, "replace");
+        await loadPage(1, "replace", searchTerm);
       } finally {
         setIsLoading(false);
       }
-    }, 400);
+    }, 600);
 
     return () => clearTimeout(timeout);
   }, [searchTerm, user, loadPage]);
@@ -164,25 +157,22 @@ const Feed: React.FC = () => {
     if (isLoading || isLoadingMore || !hasMore) return;
 
     setIsLoadingMore(true);
-
     try {
-      await loadPage(page + 1, "append");
+      await loadPage(page + 1, "append", searchTerm);
     } finally {
       setIsLoadingMore(false);
     }
-  }, [hasMore, isLoading, isLoadingMore, loadPage, page]);
+  }, [hasMore, isLoading, isLoadingMore, loadPage, page, searchTerm]);
 
   useEffect(() => {
     if (isLoading) return;
 
-    if (observerRef.current) {
-      observerRef.current.disconnect();
-    }
+    observerRef.current?.disconnect();
 
     observerRef.current = new IntersectionObserver(
       (entries) => {
         if (entries[0]?.isIntersecting && hasMore && !isLoadingMore) {
-          loadMore();
+          void loadMore();
         }
       },
       { threshold: 0.1 }

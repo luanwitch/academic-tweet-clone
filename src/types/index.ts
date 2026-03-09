@@ -1,44 +1,53 @@
-// TypeScript interfaces for the Twitter Clone
-// These match the expected Django REST Framework models
-
 export interface User {
-  profile_image: any;
-  user_avatar: any;
-  avatar: any;
   id: number;
   username: string;
-  email: string;
-  profile_picture?: string;
-  followers_count: number;
-  following_count: number;
+  email?: string;
+
+  avatar?: string | null;
+  bio?: string | null;
+
+  followers_count?: number;
+  following_count?: number;
+
   is_following?: boolean;
-  created_at: string;
+
+  profile_image?: string | null;
+  user_avatar?: string | null;
+  profile_picture?: string | null;
 }
 
 export interface Post {
-  user: any;
-  user_id: any;
-  username: any;
   id: number;
-  author: User;
+  user: number;
+  user_id: number;
+  username: string;
+  user_avatar?: string | null;
+
   content: string;
+  created_at: string;
+
   likes_count: number;
   comments_count: number;
-  is_liked: boolean;
-  created_at: string;
+
+  liked_by_me?: boolean;
+  is_owner?: boolean;
 }
 
 export interface Comment {
   id: number;
-  author: User;
-  post: number;
+  tweet?: number;
+  post?: number;
+  user?: number;
+  username?: string;
+  user_avatar?: string | null;
   content: string;
   created_at: string;
+  is_owner?: boolean;
 }
 
 export interface AuthResponse {
   token: string;
-  user: User;
+  user?: User;
 }
 
 export interface LoginCredentials {
@@ -55,13 +64,16 @@ export interface RegisterCredentials {
 
 export interface ProfileUpdateData {
   username?: string;
+  email?: string;
+  bio?: string;
+  avatar?: File;
   profile_picture?: File;
 }
 
 export interface PasswordChangeData {
   old_password: string;
   new_password: string;
-  new_password_confirm: string;
+  new_password2: string;
 }
 
 export interface PaginatedResponse<T> {

@@ -1,9 +1,6 @@
-import { apiRequest } from "./api";
+import { apiRequest, extractResults } from "./api";
 import type { Comment, Post } from "@/types";
 
-/**
- * Paginated response padrão do Django REST Framework
- */
 export interface PaginatedResponse<T> {
   count: number;
   next: string | null;
@@ -14,107 +11,199 @@ export interface PaginatedResponse<T> {
 type GetPostsParams = {
   author?: number;
   page?: number;
+  search?: string;
+  hashtag?: string;
 };
 
-function buildQuery(params: Record<string, any>) {
+type PostsResponse<T> = T[] | PaginatedResponse<T>;
+
+function buildQuery(params: Record<string, unknown>) {
   const qs = new URLSearchParams();
-  Object.entries(params).forEach(([k, v]) => {
-    if (v === undefined || v === null || v === "") return;
-    qs.set(k, String(v));
+
+  Object.entries(params).forEach(([key, value]) => {
+    if (value === undefined || value === null || value === "") return;
+    qs.set(key, String(value));
   });
-  const q = qs.toString();
-  return q ? `?${q}` : "";
+
+  const query = qs.toString();
+  return query ? `?${query}` : "";
 }
 
 export const postService = {
-  /**
-   * Get feed (posts from followed users)
-   */
-  async getFeed(page: number = 1, PAGE_SIZE: number): Promise<PaginatedResponse<Post>> {
-    return apiRequest<PaginatedResponse<Post>>(`/feed/?page=${page}`);
+  async getFeed(
+    page: number = 1,
+    pageSize: number = 10
+  ): Promise<PaginatedResponse<Post>> {
+    return apiRequest<PaginatedResponse<Post>>(
+      `/feed/?page=${page}&page_size=${pageSize}`,
+      {
+        auth: true,
+      }
+    );
   },
 
-  /**
-   * Get all posts or posts from a specific user
-   *
-   * ✅ Aceita 2 assinaturas:
-   * - getPosts(userId?: number, page?: number)
-   * - getPosts({ author?: number, page?: number })
-   */
+  async getFeedList(page: number = 1, pageSize: number = 10): Promise<Post[]> {
+    const data = await this.getFeed(page, pageSize);
+    return extractResults<Post>(data);
+  },
+
   async getPosts(
     userIdOrParams?: number | GetPostsParams,
     page: number = 1
-  ): Promise<PaginatedResponse<Post>> {
-    // Modo novo: getPosts({ author, page })
+  ): Promise<PostsResponse<Post>> {
     if (
       userIdOrParams &&
       typeof userIdOrParams === "object" &&
       !Array.isArray(userIdOrParams)
     ) {
       const author = userIdOrParams.author;
-      const p = userIdOrParams.page ?? 1;
+      const currentPage = userIdOrParams.page ?? 1;
+      const search = userIdOrParams.search;
+      const hashtag = userIdOrParams.hashtag;
 
-      const query = buildQuery({ author, page: p });
-      return apiRequest<PaginatedResponse<Post>>(`/posts/${query}`);
+      const query = buildQuery({
+        author,
+        page: currentPage,
+        search,
+        hashtag,
+      });
+
+      return apiRequest<PostsResponse<Post>>(`/posts/${query}`, {
+        auth: true,
+      });
     }
 
-    // Modo antigo: getPosts(userId, page)
     const userId =
       typeof userIdOrParams === "number" ? userIdOrParams : undefined;
 
-    const query = buildQuery({ author: userId, page });
-    return apiRequest<PaginatedResponse<Post>>(`/posts/${query}`);
+    const query = buildQuery({
+      author: userId,
+      page,
+    });
+
+    return apiRequest<PostsResponse<Post>>(`/posts/${query}`, {
+      auth: true,
+    });
   },
 
-  /**
-   * Get single post
-   */
+  async getPostsList(
+    userIdOrParams?: number | GetPostsParams,
+    page: number = 1
+  ): Promise<Post[]> {
+    const data = await this.getPosts(userIdOrParams, page);
+    return extractResults<Post>(data);
+  },
+
+  async getPostsByAuthor(
+    authorId: number,
+    page: number = 1
+  ): Promise<PostsResponse<Post>> {
+    return this.getPosts({ author: authorId, page });
+  },
+
+  async getPostsByAuthorList(
+    authorId: number,
+    page: number = 1
+  ): Promise<Post[]> {
+    const data = await this.getPostsByAuthor(authorId, page);
+    return extractResults<Post>(data);
+  },
+
+  async searchPosts(
+    search: string,
+    page: number = 1
+  ): Promise<PostsResponse<Post>> {
+    return this.getPosts({ search, page });
+  },
+
+  async searchPostsList(search: string, page: number = 1): Promise<Post[]> {
+    const data = await this.searchPosts(search, page);
+    return extractResults<Post>(data);
+  },
+
+  async getPostsByHashtag(
+    hashtag: string,
+    page: number = 1
+  ): Promise<PostsResponse<Post>> {
+    return this.getPosts({ hashtag, page });
+  },
+
+  async getPostsByHashtagList(
+    hashtag: string,
+    page: number = 1
+  ): Promise<Post[]> {
+    const data = await this.getPostsByHashtag(hashtag, page);
+    return extractResults<Post>(data);
+  },
+
+  async getTrendingPosts(): Promise<Post[]> {
+    return apiRequest<Post[]>("/posts/trending/", {
+      auth: true,
+    });
+  },
+
   async getPost(postId: number): Promise<Post> {
-    return apiRequest<Post>(`/posts/${postId}/`);
+    return apiRequest<Post>(`/posts/${postId}/`, {
+      auth: true,
+    });
   },
 
-  /**
-   * Create new post
-   */
   async createPost(content: string): Promise<Post> {
     return apiRequest<Post>("/posts/", {
       method: "POST",
       body: JSON.stringify({ content }),
+      auth: true,
     });
   },
 
-  /**
-   * Like a post
-   */
-  async likePost(postId: number): Promise<void> {
-    return apiRequest<void>(`/posts/${postId}/like/`, {
-      method: "POST",
+  async likePost(
+    postId: number
+  ): Promise<{ liked: boolean; likes_count: number }> {
+    return apiRequest<{ liked: boolean; likes_count: number }>(
+      `/posts/${postId}/like/`,
+      {
+        method: "POST",
+        auth: true,
+      }
+    );
+  },
+
+  async unlikePost(
+    postId: number
+  ): Promise<{ liked: boolean; likes_count: number }> {
+    return apiRequest<{ liked: boolean; likes_count: number }>(
+      `/posts/${postId}/like/`,
+      {
+        method: "POST",
+        auth: true,
+      }
+    );
+  },
+
+  async getPostLikes(postId: number): Promise<any[]> {
+    return apiRequest<any[]>(`/posts/${postId}/likes/`, {
+      auth: true,
     });
   },
 
-  /**
-   * Unlike a post
-   */
-  async unlikePost(postId: number): Promise<void> {
-    return apiRequest<void>(`/posts/${postId}/like/`, {
-      method: "DELETE",
-    });
-  },
-
-  /**
-   * Get comments for a post
-   */
   async getComments(postId: number): Promise<Comment[]> {
-    return apiRequest<Comment[]>(`/posts/${postId}/comments/`);
+    return apiRequest<Comment[]>(`/posts/${postId}/comments/`, {
+      auth: true,
+    });
   },
 
-  /**
-   * Add comment to a post
-   */
   async addComment(postId: number, content: string): Promise<Comment> {
     return apiRequest<Comment>(`/posts/${postId}/comments/`, {
       method: "POST",
       body: JSON.stringify({ content }),
+      auth: true,
+    });
+  },
+
+  async deleteComment(commentId: number): Promise<void> {
+    await apiRequest(`/comments/${commentId}/delete/`, {
+      method: "DELETE",
+      auth: true,
     });
   },
 };
