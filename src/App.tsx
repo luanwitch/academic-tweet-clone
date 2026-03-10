@@ -12,6 +12,7 @@ import Profile from "./pages/Profile";
 import CreatePost from "./pages/CreatePost";
 import NotFound from "./pages/NotFound";
 import Users from "@/pages/Users";
+import Trending from "@/pages/Trending";
 
 
 const queryClient = new QueryClient();
@@ -28,6 +29,8 @@ const App = () => (
                   <Route path="/login" element={<Login />} />
                   <Route path="/register" element={<Register />} />
                   <Route path="/users" element={<Users />} />
+                  <Route path="/trending" element={<Trending />} />
+                  <Route path="/feed" element={<Feed />} />
 
                   {/*alias do feed */}
                   <Route path="/feed" element={<Navigate to="/" replace />} />

@@ -17,6 +17,11 @@ type GetPostsParams = {
 
 type PostsResponse<T> = T[] | PaginatedResponse<T>;
 
+type TrendingHashtag = {
+  tag: string;
+  count: number;
+};
+
 function buildQuery(params: Record<string, unknown>) {
   const qs = new URLSearchParams();
 
@@ -137,9 +142,11 @@ export const postService = {
   },
 
   async getTrendingPosts(): Promise<Post[]> {
-    return apiRequest<Post[]>("/posts/trending/", {
-      auth: true,
-    });
+    return apiRequest<Post[]>("/posts/trending/");
+  },
+
+  async getTrendingHashtags(): Promise<TrendingHashtag[]> {
+    return apiRequest<TrendingHashtag[]>("/trending/hashtags/");
   },
 
   async getPost(postId: number): Promise<Post> {
@@ -186,20 +193,20 @@ export const postService = {
     });
   },
 
-  async updatePost(postId: number, content: string) {
-  return apiRequest<Post>(`/posts/${postId}/`, {
-    method: "PATCH",
-    auth: true,
-    body: JSON.stringify({ content }),
-  });
-},
+  async updatePost(postId: number, content: string): Promise<Post> {
+    return apiRequest<Post>(`/posts/${postId}/`, {
+      method: "PATCH",
+      auth: true,
+      body: JSON.stringify({ content }),
+    });
+  },
 
-async deletePost(postId: number): Promise<void> {
-  await apiRequest(`/posts/${postId}/`, {
-    method: "DELETE",
-    auth: true,
-  });
-},
+  async deletePost(postId: number): Promise<void> {
+    await apiRequest(`/posts/${postId}/`, {
+      method: "DELETE",
+      auth: true,
+    });
+  },
 
   async getComments(postId: number): Promise<Comment[]> {
     return apiRequest<Comment[]>(`/posts/${postId}/comments/`, {

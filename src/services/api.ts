@@ -10,8 +10,8 @@ export const getAuthToken = (): string | null => {
 };
 
 export const setAuthToken = (token: string | null) => {
-  for (const k of TOKEN_KEYS) {
-    localStorage.removeItem(k);
+  for (const key of TOKEN_KEYS) {
+    localStorage.removeItem(key);
   }
 
   if (token) {
@@ -21,8 +21,8 @@ export const setAuthToken = (token: string | null) => {
 };
 
 export const clearAuthToken = () => {
-  for (const k of TOKEN_KEYS) {
-    localStorage.removeItem(k);
+  for (const key of TOKEN_KEYS) {
+    localStorage.removeItem(key);
   }
   localStorage.removeItem("user");
 };
@@ -80,10 +80,65 @@ export type UploadAvatarResponse = {
   avatar: string;
 };
 
-export const extractResults = <T>(data: T[] | PaginatedResponse<T> | any): T[] => {
+export const extractResults = <T>(data: T[] | PaginatedResponse<T> | unknown): T[] => {
   if (Array.isArray(data)) return data;
-  if (Array.isArray(data?.results)) return data.results;
+  if (
+    data &&
+    typeof data === "object" &&
+    "results" in data &&
+    Array.isArray((data as PaginatedResponse<T>).results)
+  ) {
+    return (data as PaginatedResponse<T>).results;
+  }
   return [];
+};
+
+const extractErrorMessage = (data: unknown, status: number): string => {
+  if (typeof data === "string" && data.trim()) {
+    return data;
+  }
+
+  if (data && typeof data === "object") {
+    const errorData = data as Record<string, unknown>;
+
+    if (typeof errorData.detail === "string" && errorData.detail.trim()) {
+      return errorData.detail;
+    }
+
+    if (typeof errorData.message === "string" && errorData.message.trim()) {
+      return errorData.message;
+    }
+
+    if (typeof errorData.error === "string" && errorData.error.trim()) {
+      return errorData.error;
+    }
+
+    const values = Object.values(errorData)
+      .flatMap((value) => {
+        if (Array.isArray(value)) return value;
+        return [value];
+      })
+      .filter((value) => typeof value === "string" && value.trim()) as string[];
+
+    if (values.length > 0) {
+      return values.join(", ");
+    }
+  }
+
+  switch (status) {
+    case 400:
+      return "Dados inválidos. Verifique os campos e tente novamente.";
+    case 401:
+      return "Sua sessão expirou. Faça login novamente.";
+    case 403:
+      return "Você não tem permissão para realizar esta ação.";
+    case 404:
+      return "Recurso não encontrado.";
+    case 500:
+      return "Erro interno do servidor. Tente novamente mais tarde.";
+    default:
+      return "Erro na requisição.";
+  }
 };
 
 export const apiRequest = async <T>(
@@ -98,12 +153,14 @@ export const apiRequest = async <T>(
   const url = isAbsoluteUrl ? endpoint : `${API_BASE_URL}${cleanEndpoint}`;
 
   const headers = new Headers(options.headers || {});
+  const isFormData = options.body instanceof FormData;
 
-  if (!(options.body instanceof FormData) && !headers.has("Content-Type")) {
+  if (!isFormData && !headers.has("Content-Type")) {
     headers.set("Content-Type", "application/json");
   }
 
   const shouldSendAuth = options.auth !== false;
+
   if (shouldSendAuth && token) {
     headers.set("Authorization", `Token ${token}`);
   }
@@ -113,49 +170,65 @@ export const apiRequest = async <T>(
   console.log(`[API REQUEST] ${method} ${url}`, {
     auth: shouldSendAuth ? "ON" : "OFF",
     tokenPresent: Boolean(token),
-    body: options.body instanceof FormData ? "FormData (Image)" : options.body,
+    body: isFormData ? "FormData" : options.body,
   });
 
-  console.log("[API HEADERS]", Object.fromEntries(headers.entries()));
+  try {
+    const response = await fetch(url, {
+      ...options,
+      method,
+      headers,
+    });
 
-  const response = await fetch(url, {
-    ...options,
-    method,
-    headers,
-  });
-
-  if (response.status === 204) {
-    return {} as T;
-  }
-
-  const contentType = response.headers.get("content-type") || "";
-  let data: any;
-
-  if (contentType.includes("application/json")) {
-    data = await response.json();
-  } else {
-    const text = await response.text();
-    if (!response.ok) {
-      console.error("ERRO DO SERVIDOR (HTML/TEXT):", text);
-      throw new Error(`Erro ${response.status} no servidor.`);
+    if (response.status === 204) {
+      return {} as T;
     }
-    data = text;
+
+    const contentType = response.headers.get("content-type") || "";
+    let data: unknown = null;
+
+    if (contentType.includes("application/json")) {
+      try {
+        data = await response.json();
+      } catch {
+        data = null;
+      }
+    } else {
+      try {
+        data = await response.text();
+      } catch {
+        data = null;
+      }
+    }
+
+    if (!response.ok) {
+      const message = extractErrorMessage(data, response.status);
+
+      if (response.status === 401) {
+        clearAuthToken();
+      }
+
+      console.error(`[API ERROR] ${method} ${url}`, {
+        status: response.status,
+        message,
+        response: data,
+      });
+
+      throw new Error(message);
+    }
+
+    return data as T;
+  } catch (error) {
+    if (error instanceof Error) {
+      if (error.name === "TypeError") {
+        throw new Error("Erro de conexão. Verifique sua internet ou o servidor.");
+      }
+
+      throw error;
+    }
+
+    throw new Error("Ocorreu um erro inesperado.");
   }
-
-  if (!response.ok) {
-    const errorMessage =
-      data?.detail ||
-      data?.message ||
-      data?.error ||
-      (typeof data === "object"
-        ? Object.values(data).flat().join(", ")
-        : null) ||
-      "Erro na requisição";
-
-    throw new Error(errorMessage);
-  }
-
-  return data as T;
 };
 
 export const login = async (username: string, password: string) => {
@@ -243,7 +316,10 @@ export const getPostsByAuthor = async (authorId: number, page = 1) => {
   );
 };
 
-export const getPostsByAuthorList = async (authorId: number, page = 1): Promise<Post[]> => {
+export const getPostsByAuthorList = async (
+  authorId: number,
+  page = 1
+): Promise<Post[]> => {
   const data = await getPostsByAuthor(authorId, page);
   return extractResults<Post>(data);
 };

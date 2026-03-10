@@ -10,6 +10,7 @@ import { useToast } from "@/hooks/use-toast";
 import type { Post } from "@/types";
 import CommentSection from "./CommentSection";
 
+
 interface PostCardProps {
   post: Post;
   currentUserId?: number;
@@ -301,8 +302,22 @@ const handleLike = async () => {
             </div>
           ) : (
             <p className="text-foreground text-[15px] whitespace-pre-wrap break-words mb-3 leading-normal">
-              {localPost.content}
-            </p>
+            {localPost.content.split(/(\#[a-zA-Z0-9_]+)/g).map((part, index) => {
+              if (part.startsWith("#")) {
+                const hashtag = part.replace("#", "");
+                return (
+                  <Link
+                    key={`${part}-${index}`}
+                    to={`/feed?hashtag=${hashtag}`}
+                    className="text-blue-500 hover:underline"
+                  >
+                    {part}
+                  </Link>
+                );
+              }
+              return <React.Fragment key={index}>{part}</React.Fragment>;
+            })}
+          </p>
           )}
 
           <div className="flex items-center gap-6">
