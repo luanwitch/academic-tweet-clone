@@ -186,6 +186,21 @@ export const postService = {
     });
   },
 
+  async updatePost(postId: number, content: string) {
+  return apiRequest<Post>(`/posts/${postId}/`, {
+    method: "PATCH",
+    auth: true,
+    body: JSON.stringify({ content }),
+  });
+},
+
+async deletePost(postId: number): Promise<void> {
+  await apiRequest(`/posts/${postId}/`, {
+    method: "DELETE",
+    auth: true,
+  });
+},
+
   async getComments(postId: number): Promise<Comment[]> {
     return apiRequest<Comment[]>(`/posts/${postId}/comments/`, {
       auth: true,

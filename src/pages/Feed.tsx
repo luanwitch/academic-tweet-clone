@@ -160,6 +160,10 @@ const Feed: React.FC = () => {
     );
   };
 
+  const handlePostDelete = (postId: number) => {
+  setPosts((prev) => prev.filter((post) => post.id !== postId));
+};
+
   const loadMore = useCallback(async () => {
     if (isLoading || isLoadingMore || !hasMore) return;
 
@@ -230,20 +234,22 @@ const Feed: React.FC = () => {
           </div>
         ) : (
           <div className="divide-y divide-border">
-            {posts.map((post) => (
+           {posts.map((post) => (
               <PostCard
                 key={post.id}
                 post={post}
+                currentUserId={user?.id}
                 onPostUpdate={handlePostUpdate}
+                onPostDelete={handlePostDelete}
               />
             ))}
-
             <div ref={loadMoreRef} className="py-8 min-h-[100px]">
               {isLoadingMore && (
                 <div className="flex justify-center">
                   <Loader2 className="h-6 w-6 animate-spin text-primary" />
                 </div>
               )}
+              
 
               {!hasMore && !isLoadingMore && (
                 <p className="text-center text-muted-foreground text-sm">

@@ -17,6 +17,7 @@ export interface User {
 }
 
 export interface Post {
+  is_liked: any;
   id: number;
   user: number;
   user_id: number;
